@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: sistema-camaras-api
+    env_file: .env
+    environment:
+      DATABASE_PATH: /app/data/camaras.db
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - app_data:/app/data
+    networks:
+      - sistema-camaras-network
+    # Corre las migraciones pendientes antes de levantar la API — el runner
+    # propio (src/migrate.js) es idempotente, así que es seguro en cada arranque.
+    command: sh -c "npm run migrate:up && npm start"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: sistema-camaras-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    networks:
+      - sistema-camaras-network
+
+volumes:
+  app_data:
+
+networks:
+  sistema-camaras-network:
+    driver: bridge

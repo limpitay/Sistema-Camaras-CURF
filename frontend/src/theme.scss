@@ -1,0 +1,36 @@
+// Paleta y tipografía tomadas de https://curf.com.ar (Clínica Reina Fabiola):
+// --main-blue-color / --main-light-blue-color / --main-yellow-color en su CSS,
+// y Merriweather + Merriweather Sans como fuentes. Se recompila Bootstrap con
+// estas variables para que btn-primary, bg-primary, badges, etc. usen
+// directamente los colores institucionales, en vez de pisarlos con CSS aparte.
+$primary: #002856;
+$secondary: #115896;
+$warning: #e2b900;
+
+$font-family-sans-serif: 'Merriweather Sans', system-ui, -apple-system, sans-serif;
+$headings-font-family: 'Merriweather', Georgia, serif;
+$headings-font-weight: 700;
+
+$body-bg: #f4f6f8;
+$border-radius: 0.5rem;
+$border-radius-sm: 0.375rem;
+$border-radius-lg: 0.75rem;
+
+@import 'bootstrap/scss/bootstrap';
+
+body {
+  min-height: 100vh;
+}
+
+.navbar-brand {
+  font-family: $headings-font-family;
+  font-weight: 700;
+}
+
+.table {
+  font-size: 0.875rem;
+}
+
+.card-title {
+  font-family: $headings-font-family;
+}

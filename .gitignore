@@ -1,0 +1,35 @@
+# Dependencias (nunca se suben, se instalan con npm install)
+node_modules/
+**/node_modules/
+
+# Builds compilados
+frontend/dist/
+backend/dist/
+dist/
+build/
+
+# Variables de entorno (secretos)
+.env
+.env.local
+.env.*.local
+
+# Base de datos SQLite local
+backend/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Override local de puertos/config de docker compose (varía por máquina)
+docker-compose.override.yml

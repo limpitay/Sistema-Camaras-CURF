@@ -1,0 +1,8 @@
+// Uso: requireRole('admin', 'direccion') — debe ir siempre después de auth.js,
+// que es quien completa req.user a partir del JWT.
+module.exports = (...rolesPermitidos) => (req, res, next) => {
+  if (!req.user || !rolesPermitidos.includes(req.user.rol)) {
+    return res.status(403).json({ error: 'No tenés permiso para esta acción' });
+  }
+  next();
+};

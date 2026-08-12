@@ -1,0 +1,36 @@
+// Lista base de áreas/sectores del hospital, tomada del catálogo ya cargado
+// en Sistema-Nomenclatura-CURF (docker/db/init.sql, tabla `sectors`) — acá
+// solo como sugerencia de autocompletado (sin el código corto que usan allá,
+// p. ej. "GUA"), no como catálogo cerrado: Admin puede seguir escribiendo
+// cualquier nombre de área que no esté en esta lista.
+export const AREAS_SUGERIDAS = [
+  'Administración',
+  'Dirección',
+  'Enfermería',
+  'Laboratorio',
+  'Comunicación',
+  'Recursos Humanos',
+  'Finanzas',
+  'Contabilidad',
+  'Consultorios Externos',
+  'Auditoría Médica',
+  'Convenios',
+  'Compras',
+  'Mantenimiento',
+  'Bioingeniería',
+  'Internado Pediatría',
+  'Internado Adultos',
+  'Guardia Adultos',
+  'Guardia Pediátrica',
+  'Anestesia',
+  'Office Varios',
+  'Sistemas',
+  'Fisioterapia',
+  'Psicología',
+  'Nutrición',
+  'Farmacia',
+  'UTI Adultos',
+  'UTI Pediátrica',
+  'Quirófano',
+  'Diagnóstico por Imágenes',
+];
