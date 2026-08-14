@@ -6,11 +6,20 @@ const { UPLOADS_DIR } = require('./middleware/upload');
 
 const app = express();
 
+// Sin esto, req.ip siempre sería la IP interna del contenedor de nginx (el
+// único "cliente" que ve Express), porque todo pasa por el proxy_pass de
+// nginx.conf. 'uniquelocal' hace que Express confíe en hops que vienen de
+// direcciones privadas (loopback/link-local/RFC1918 — exactamente donde vive
+// nginx en la red de Docker) y tome la IP real del cliente del header
+// X-Forwarded-For que nginx agrega. Necesario para restringirRedLocal.
+app.set('trust proxy', 'loopback, linklocal, uniquelocal');
+
 // CORS_ORIGIN: lista de orígenes separados por coma (ej: "http://localhost:5173,http://192.168.1.50:8080")
 // Si no está seteada, queda abierto a cualquier origen.
 const corsOrigin = process.env.CORS_ORIGIN;
 app.use(cors(corsOrigin ? { origin: corsOrigin.split(',').map((o) => o.trim()) } : undefined));
 app.use(express.json());
+app.use(require('./middleware/restringirRedLocal'));
 
 // Fotos de cámara subidas como archivo (RF-06). El prefijo tiene que coincidir
 // con el ^~ /api/ de nginx.conf para que no lo intercepte la regla de cache

@@ -24,6 +24,20 @@ export function AuthProvider({ children }) {
     return res.data;
   };
 
+  // Login institucional por código de un solo uso enviado por email — no
+  // depende de tener Google Workspace configurado (ver auth.js).
+  const solicitarCodigo = async (email) => {
+    const res = await client.post('/auth/solicitar-codigo', { email });
+    return res.data;
+  };
+
+  const verificarCodigo = async (email, codigo) => {
+    const res = await client.post('/auth/verificar-codigo', { email, codigo });
+    localStorage.setItem('token', res.data.token);
+    setUser(res.data.user);
+    return res.data;
+  };
+
   // Login de desarrollo — ver ESPECIFICACION.md sección 9 (OAuth pendiente de
   // credenciales). El backend rechaza este endpoint fuera de desarrollo.
   const loginDev = async (email) => {
@@ -39,7 +53,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, loginWithGoogle, loginDev, logout }}>
+    <AuthContext.Provider value={{ user, loading, loginWithGoogle, loginDev, solicitarCodigo, verificarCodigo, logout }}>
       {children}
     </AuthContext.Provider>
   );
