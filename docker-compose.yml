@@ -9,8 +9,14 @@ services:
     env_file: .env
     environment:
       DATABASE_PATH: /app/data/camaras.db
+    # Solo esta PC puede pegarle directo al puerto de la API (para debug/curl
+    # local). El resto de la LAN tiene que entrar por nginx (8080), que es el
+    # único lugar donde la IP del cliente no se puede falsificar — nginx
+    # siempre pisa X-Forwarded-For con la IP real, pero si la API quedara
+    # expuesta a toda la red, cualquiera podría pegarle directo a ella y
+    # mandar ese header con lo que quiera para saltarse restringirRedLocal.
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     volumes:
       - ./backend:/app
       - /app/node_modules
