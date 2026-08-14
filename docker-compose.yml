@@ -22,7 +22,11 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
-      - app_data:/app/data
+      # Bind mount (no volumen con nombre) a propósito: así camaras.db queda
+      # como un archivo real en backend/data/, visible desde Windows, y se
+      # puede abrir con SQLTools/DB Browser sin tener que copiarlo afuera de
+      # Docker cada vez.
+      - ./backend/data:/app/data
     networks:
       - sistema-camaras-network
     # Corre las migraciones pendientes y el alta del admin inicial antes de
@@ -41,9 +45,6 @@ services:
       - api
     networks:
       - sistema-camaras-network
-
-volumes:
-  app_data:
 
 networks:
   sistema-camaras-network:
