@@ -18,8 +18,8 @@ cp .env.example .env        # completar JWT_SECRET como mínimo
 docker compose up --build
 ```
 
-- API: http://localhost:3001
-- Frontend: http://localhost:8080
+- API: http://localhost:3088
+- Frontend: http://localhost:8088
 
 Las migraciones corren solas al levantar el contenedor `api` (son idempotentes — llevan registro de lo aplicado en la tabla `_migrations`). Para correrlas a mano:
 

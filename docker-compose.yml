@@ -10,13 +10,15 @@ services:
     environment:
       DATABASE_PATH: /app/data/camaras.db
     # Solo esta PC puede pegarle directo al puerto de la API (para debug/curl
-    # local). El resto de la LAN tiene que entrar por nginx (8080), que es el
+    # local). El resto de la LAN tiene que entrar por nginx (8088), que es el
     # único lugar donde la IP del cliente no se puede falsificar — nginx
     # siempre pisa X-Forwarded-For con la IP real, pero si la API quedara
     # expuesta a toda la red, cualquiera podría pegarle directo a ella y
     # mandar ese header con lo que quiera para saltarse restringirRedLocal.
+    # El puerto interno del contenedor sigue siendo 3001 (ver PORT en .env);
+    # solo cambia el puerto por el que se lo ve desde el host/afuera.
     ports:
-      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:3088:3001"
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -34,7 +36,7 @@ services:
       dockerfile: Dockerfile.frontend
     container_name: sistema-camaras-frontend
     ports:
-      - "8080:80"
+      - "8088:80"
     depends_on:
       - api
     networks:
