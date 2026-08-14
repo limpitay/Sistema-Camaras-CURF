@@ -11,9 +11,9 @@ const SELECT_BASE = `
   FROM accesos_otorgados ao
   JOIN usuarios u ON u.id = ao.usuario_id
   JOIN camaras c ON c.id = ao.camara_id
+  JOIN edificios e ON e.id = c.edificio_id
+  JOIN pisos p ON p.id = c.piso_id
   JOIN areas a ON a.id = c.area_id
-  JOIN pisos p ON p.id = a.piso_id
-  JOIN edificios e ON e.id = p.edificio_id
 `;
 
 function boolificar(row) {

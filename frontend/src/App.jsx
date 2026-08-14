@@ -4,9 +4,11 @@ import Login from './pages/Login';
 import VistaMandoMedio from './pages/VistaMandoMedio';
 import MisSolicitudes from './pages/MisSolicitudes';
 import InventarioAdmin from './pages/InventarioAdmin';
+import Crud from './pages/Crud';
 import Solicitudes from './pages/Solicitudes';
 import PendientesHikCentral from './pages/PendientesHikCentral';
 import Historial from './pages/Historial';
+import AccesosNvr from './pages/AccesosNvr';
 
 function PrivateRoute({ roles, children }) {
   const { user, loading } = useAuth();
@@ -42,8 +44,16 @@ export default function App() {
             <PrivateRoute roles={['admin', 'sistemas_lectura']}><InventarioAdmin /></PrivateRoute>
           } />
 
+          <Route path="/crud" element={
+            <PrivateRoute roles={['admin']}><Crud /></PrivateRoute>
+          } />
+
           <Route path="/solicitudes" element={
             <PrivateRoute roles={['direccion', 'admin', 'sistemas_lectura']}><Solicitudes /></PrivateRoute>
+          } />
+
+          <Route path="/accesos-nvr" element={
+            <PrivateRoute roles={['admin', 'sistemas_lectura']}><AccesosNvr /></PrivateRoute>
           } />
 
           <Route path="/pendientes-hikcentral" element={

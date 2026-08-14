@@ -11,13 +11,16 @@ const LINKS_POR_ROL = {
     { to: '/historial', label: 'Historial de accesos' },
   ],
   admin: [
-    { to: '/inventario', label: 'Inventario de cámaras' },
+    { to: '/inventario', label: 'Camaras' },
+    { to: '/crud', label: 'CRUD' },
+    { to: '/accesos-nvr', label: 'Accesos NVR' },
     { to: '/solicitudes', label: 'Solicitudes' },
     { to: '/pendientes-hikcentral', label: 'Pendientes HikCentral' },
     { to: '/historial', label: 'Historial de accesos' },
   ],
   sistemas_lectura: [
-    { to: '/inventario', label: 'Inventario de cámaras' },
+    { to: '/inventario', label: 'Camaras' },
+    { to: '/accesos-nvr', label: 'Accesos NVR' },
     { to: '/solicitudes', label: 'Solicitudes' },
     { to: '/pendientes-hikcentral', label: 'Pendientes HikCentral' },
     { to: '/historial', label: 'Historial de accesos' },

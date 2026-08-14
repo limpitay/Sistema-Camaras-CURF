@@ -7,18 +7,31 @@ const { notificar } = require('../utils/notificaciones');
 const router = express.Router();
 
 const CAMARAS_DE_SOLICITUD = `
-  SELECT c.id, c.hostname, c.descripcion, e.nombre AS edificio, p.nombre AS piso, a.nombre AS area
+  SELECT c.id, c.hostname, c.descripcion, c.observaciones, c.imagen_url,
+    e.nombre AS edificio, p.nombre AS piso, a.nombre AS area,
+    c.ip, c.usuario, c.contrasena, n.hostname AS nvr
   FROM solicitud_camaras sc
   JOIN camaras c ON c.id = sc.camara_id
+  JOIN edificios e ON e.id = c.edificio_id
+  JOIN pisos p ON p.id = c.piso_id
   JOIN areas a ON a.id = c.area_id
-  JOIN pisos p ON p.id = a.piso_id
-  JOIN edificios e ON e.id = p.edificio_id
+  LEFT JOIN nvrs n ON n.id = c.nvr_id
   WHERE sc.solicitud_id = ?
   ORDER BY e.nombre, p.nombre, a.nombre, c.hostname
 `;
 
-function conCamaras(solicitud) {
-  return { ...solicitud, camaras: db.prepare(CAMARAS_DE_SOLICITUD).all(solicitud.id) };
+// Los datos de conexión (IP/usuario/contraseña) solo tienen sentido una vez
+// que el mando medio ya tiene el acceso aprobado — para RF-08 (nunca antes:
+// mismo criterio que en camaras.js, "el mando medio nunca recibe IP/MAC" se
+// aplica hasta que efectivamente le corresponde poder entrar). Dirección/
+// Admin/Sistemas-lectura los ven siempre (ya tienen acceso completo al
+// inventario en otras pantallas).
+function conCamaras(solicitud, incluirConexion) {
+  const camaras = db.prepare(CAMARAS_DE_SOLICITUD).all(solicitud.id);
+  if (!incluirConexion) {
+    camaras.forEach((c) => { delete c.ip; delete c.usuario; delete c.contrasena; delete c.nvr; });
+  }
+  return { ...solicitud, camaras };
 }
 
 // POST /api/solicitudes — RF-10/RF-11/RF-12 (mando_medio): pide acceso a una
@@ -72,7 +85,7 @@ router.post('/', auth, requireRole('mando_medio'), (req, res) => {
     });
   }
 
-  const solicitudConCamaras = conCamaras(crear.solicitud);
+  const solicitudConCamaras = conCamaras(crear.solicitud, false);
 
   // RF-24: nueva solicitud → notifica a Dirección y a destinatarios fijos.
   notificar('nueva_solicitud', { solicitud: solicitudConCamaras, solicitante: req.user });
@@ -85,7 +98,7 @@ router.get('/mias', auth, requireRole('mando_medio'), (req, res) => {
   const solicitudes = db.prepare(
     'SELECT * FROM solicitudes WHERE usuario_id = ? ORDER BY fecha_solicitud DESC'
   ).all(req.user.id);
-  res.json(solicitudes.map(conCamaras));
+  res.json(solicitudes.map((s) => conCamaras(s, s.estado === 'aprobada')));
 });
 
 // GET /api/solicitudes — RF-13/RF-19 (Dirección, Admin, Sistemas-lectura):
@@ -99,7 +112,7 @@ router.get('/', auth, requireRole('direccion', 'admin', 'sistemas_lectura'), (re
     ? db.prepare(`${base} WHERE s.estado = ? ORDER BY s.fecha_solicitud DESC`).all(estado)
     : db.prepare(`${base} ORDER BY s.fecha_solicitud DESC`).all();
 
-  res.json(filas.map(conCamaras));
+  res.json(filas.map((s) => conCamaras(s, true)));
 });
 
 // Devuelve { ok:false } si la solicitud no existe o ya fue resuelta (evita
@@ -133,7 +146,7 @@ function resolverSolicitud(solicitudId, estado, resueltoPor) {
     }
   }
 
-  return { ok: true, solicitud: conCamaras(solicitud), accesos };
+  return { ok: true, solicitud: conCamaras(solicitud, true), accesos };
 }
 
 // PATCH /api/solicitudes/:id — RF-13/RF-14 (Dirección): aprueba o rechaza la

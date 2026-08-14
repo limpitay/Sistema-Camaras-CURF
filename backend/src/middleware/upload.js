@@ -11,17 +11,28 @@ const UPLOADS_DIR = path.join(path.dirname(process.env.DATABASE_PATH || path.joi
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const EXTENSION_POR_TIPO = { 'image/jpeg': '.jpg', 'image/png': '.png' };
+const EXTENSIONES_VALIDAS = { '.jpg': '.jpg', '.jpeg': '.jpg', '.png': '.png' };
+
+// Algunos navegadores/SO no completan bien el mimetype (queda vacío o
+// genérico) para archivos con extensión en mayúsculas o exportados por
+// ciertas apps — por eso, si el mimetype no matchea, se cae a mirar la
+// extensión del nombre original (sin importar mayúsculas/minúsculas) antes
+// de rechazar el archivo.
+function extensionDeArchivo(file) {
+  if (EXTENSION_POR_TIPO[file.mimetype]) return EXTENSION_POR_TIPO[file.mimetype];
+  return EXTENSIONES_VALIDAS[path.extname(file.originalname).toLowerCase()] || null;
+}
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOADS_DIR),
-  filename: (req, file, cb) => cb(null, `${crypto.randomUUID()}${EXTENSION_POR_TIPO[file.mimetype]}`),
+  filename: (req, file, cb) => cb(null, `${crypto.randomUUID()}${extensionDeArchivo(file)}`),
 });
 
 const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
   fileFilter: (req, file, cb) => {
-    if (!EXTENSION_POR_TIPO[file.mimetype]) {
+    if (!extensionDeArchivo(file)) {
       return cb(new Error('Solo se permiten imágenes JPG o PNG'));
     }
     cb(null, true);

@@ -20,19 +20,48 @@ export default function MisSolicitudes() {
         <div key={s.id} className="card shadow-sm mb-3">
           <div className="card-body">
             <div className="d-flex justify-content-between align-items-start">
-              <span className="text-muted small">{new Date(s.fecha_solicitud).toLocaleString()}</span>
+              <span className="text-body-secondary small">{new Date(s.fecha_solicitud).toLocaleString()}</span>
               <span className={`badge ${BADGE[s.estado] || 'bg-secondary'}`}>{ETIQUETAS[s.estado] || s.estado}</span>
             </div>
             {s.comentario && <p className="text-body-secondary small mt-2 mb-2">{s.comentario}</p>}
-            <ul className="list-unstyled small mb-0 mt-2">
-              {s.camaras.map((c) => (
-                <li key={c.id}>
-                  <strong>{c.descripcion || c.hostname}</strong> — {c.edificio} · {c.piso} · {c.area}
-                </li>
-              ))}
-            </ul>
+
+            {s.estado === 'aprobada' ? (
+              <div className="table-responsive mt-2">
+                <table className="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Cámara</th><th>Ubicación</th><th>IP</th><th>Usuario</th><th>Contraseña</th><th>NVR</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {s.camaras.map((c) => (
+                      <tr key={c.id}>
+                        <td>{c.descripcion || c.hostname}</td>
+                        <td>{c.edificio} · {c.piso} · {c.area}</td>
+                        <td>{c.ip || '—'}</td>
+                        <td>{c.usuario || '—'}</td>
+                        <td>{c.contrasena || '—'}</td>
+                        <td>{c.nvr || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="text-body-secondary small mt-2 mb-0">
+                  Entrá con la IP, usuario y contraseña de cada cámara desde SmartPSS o el Client de HikCentral.
+                </p>
+              </div>
+            ) : (
+              <ul className="list-unstyled small mb-0 mt-2">
+                {s.camaras.map((c) => (
+                  <li key={c.id}>
+                    <strong>{c.descripcion || c.hostname}</strong> — {c.edificio} · {c.piso} · {c.area}
+                  </li>
+                ))}
+              </ul>
+            )}
+
             {s.fecha_resolucion && (
-              <p className="text-muted small mt-2 mb-0">
+              <p className="text-body-secondary small mt-2 mb-0">
                 Resuelta el {new Date(s.fecha_resolucion).toLocaleString()}
               </p>
             )}
@@ -40,7 +69,7 @@ export default function MisSolicitudes() {
         </div>
       ))}
 
-      {solicitudes.length === 0 && <p className="text-muted">Todavía no hiciste ninguna solicitud.</p>}
+      {solicitudes.length === 0 && <p className="text-body-secondary">Todavía no hiciste ninguna solicitud.</p>}
     </Layout>
   );
 }

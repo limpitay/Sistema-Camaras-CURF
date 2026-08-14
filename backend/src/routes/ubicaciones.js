@@ -5,23 +5,32 @@ const requireRole = require('../middleware/requireRole');
 
 const router = express.Router();
 
-// Jerarquía edificio -> piso -> área que usa el alta de cámaras (RF-04) y los
-// filtros de inventario (RF-07). Lectura abierta a cualquier rol autenticado
-// (la necesita también la vista del mando medio para mostrar ubicación);
-// alta restringida a Admin, igual que el resto del inventario.
+// Ubicación de cámaras (RF-04/RF-07): edificio, piso y área son tres
+// catálogos globales independientes (ver 009_areas_globales.sql y
+// 011_pisos_globales.sql) — un piso como "3er Piso" no pertenece a un
+// edificio puntual, así que se eligen como tres selects sueltos, no en
+// cascada. Lectura abierta a cualquier rol autenticado (la necesita también
+// la vista del mando medio para mostrar ubicación); alta/edición/borrado
+// restringidos a Admin (ver panel CRUD en el frontend).
 
-// Todo edificio nuevo arranca con este set estándar de pisos (Subsuelo a 8vo
-// piso) — es el mismo criterio de la migración 008_seed_edificios_y_pisos.sql,
-// para que valga tanto para los edificios sembrados como para los que Admin
-// cree después a mano.
-const PISOS_ESTANDAR = [
-  'Subsuelo', 'Planta Baja', '1er Piso', '2do Piso', '3er Piso',
-  '4to Piso', '5to Piso', '6to Piso', '7mo Piso', '8vo Piso',
-];
+// Traduce una violación de UNIQUE de SQLite a un 409 legible; cualquier otro
+// error se relanza para que lo capture el manejador global (500).
+function siEsConflictoUnico(res, err, mensaje) {
+  if (/UNIQUE constraint failed/.test(err.message)) {
+    res.status(409).json({ error: mensaje });
+    return true;
+  }
+  throw err;
+}
 
 // GET /api/ubicaciones/edificios
 router.get('/edificios', auth, (req, res) => {
-  res.json(db.prepare('SELECT * FROM edificios ORDER BY nombre').all());
+  res.json(db.prepare(`
+    SELECT e.*,
+      (SELECT COUNT(*) FROM camaras c WHERE c.edificio_id = e.id) AS cantidad_camaras,
+      (SELECT COUNT(*) FROM nvrs n WHERE n.edificio_id = e.id) AS cantidad_nvrs
+    FROM edificios e ORDER BY e.nombre
+  `).all());
 });
 
 // POST /api/ubicaciones/edificios — Admin
@@ -32,57 +41,155 @@ router.post('/edificios', auth, requireRole('admin'), (req, res) => {
   const existente = db.prepare('SELECT * FROM edificios WHERE nombre = ?').get(nombre);
   if (existente) return res.status(200).json(existente);
 
-  const crear = db.transaction(() => {
-    const { lastInsertRowid } = db.prepare('INSERT INTO edificios (nombre) VALUES (?)').run(nombre);
-    const insertarPiso = db.prepare('INSERT INTO pisos (edificio_id, nombre, orden) VALUES (?, ?, ?)');
-    PISOS_ESTANDAR.forEach((nombrePiso, orden) => insertarPiso.run(lastInsertRowid, nombrePiso, orden));
-    return lastInsertRowid;
-  });
-
-  const id = crear();
-  res.status(201).json(db.prepare('SELECT * FROM edificios WHERE id = ?').get(id));
+  const { lastInsertRowid } = db.prepare('INSERT INTO edificios (nombre) VALUES (?)').run(nombre);
+  res.status(201).json(db.prepare('SELECT * FROM edificios WHERE id = ?').get(lastInsertRowid));
 });
 
-// GET /api/ubicaciones/pisos?edificio_id=
+// PUT /api/ubicaciones/edificios/:id — Admin
+router.put('/edificios/:id', auth, requireRole('admin'), (req, res) => {
+  const { nombre } = req.body;
+  if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
+  if (!db.prepare('SELECT id FROM edificios WHERE id = ?').get(req.params.id)) {
+    return res.status(404).json({ error: 'Edificio no encontrado' });
+  }
+
+  try {
+    db.prepare('UPDATE edificios SET nombre = ? WHERE id = ?').run(nombre, req.params.id);
+  } catch (err) {
+    if (siEsConflictoUnico(res, err, 'Ya existe un edificio con ese nombre')) return;
+  }
+  res.json(db.prepare('SELECT * FROM edificios WHERE id = ?').get(req.params.id));
+});
+
+// DELETE /api/ubicaciones/edificios/:id — Admin. Bloqueado si tiene cámaras
+// o NVRs asociados.
+router.delete('/edificios/:id', auth, requireRole('admin'), (req, res) => {
+  const { id } = req.params;
+  if (!db.prepare('SELECT id FROM edificios WHERE id = ?').get(id)) {
+    return res.status(404).json({ error: 'Edificio no encontrado' });
+  }
+
+  const { camaras } = db.prepare('SELECT COUNT(*) AS camaras FROM camaras WHERE edificio_id = ?').get(id);
+  const { nvrs } = db.prepare('SELECT COUNT(*) AS nvrs FROM nvrs WHERE edificio_id = ?').get(id);
+  if (camaras > 0 || nvrs > 0) {
+    return res.status(409).json({ error: `No se puede borrar: tiene ${camaras} cámara(s) y ${nvrs} NVR(s) asociados.` });
+  }
+
+  db.prepare('DELETE FROM edificios WHERE id = ?').run(id);
+  res.status(204).end();
+});
+
+// GET /api/ubicaciones/pisos — catálogo global (ver 011_pisos_globales.sql):
+// un piso no pertenece a un edificio puntual, la misma fila "3er Piso" vale
+// para cualquiera.
 router.get('/pisos', auth, (req, res) => {
-  const { edificio_id } = req.query;
-  if (!edificio_id) return res.status(400).json({ error: 'edificio_id es requerido' });
-  res.json(db.prepare('SELECT * FROM pisos WHERE edificio_id = ? ORDER BY orden').all(edificio_id));
+  res.json(db.prepare(`
+    SELECT p.*,
+      (SELECT COUNT(*) FROM camaras c WHERE c.piso_id = p.id) AS cantidad_camaras,
+      (SELECT COUNT(*) FROM nvrs n WHERE n.piso_id = p.id) AS cantidad_nvrs
+    FROM pisos p ORDER BY p.orden, p.nombre
+  `).all());
 });
 
-// POST /api/ubicaciones/pisos — Admin. Para pisos fuera del set estándar (ej.
-// "Terraza", "Anexo") — los edificios ya arrancan con Subsuelo..8vo Piso
-// (ver PISOS_ESTANDAR), esto es solo para el caso excepcional.
+// POST /api/ubicaciones/pisos — Admin. Piso global: una vez creado queda
+// disponible para elegir en la cámara de cualquier edificio.
 router.post('/pisos', auth, requireRole('admin'), (req, res) => {
-  const { edificio_id, nombre } = req.body;
-  if (!edificio_id || !nombre) return res.status(400).json({ error: 'edificio_id y nombre son requeridos' });
+  const { nombre } = req.body;
+  if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
 
-  const existente = db.prepare('SELECT * FROM pisos WHERE edificio_id = ? AND nombre = ?').get(edificio_id, nombre);
+  const existente = db.prepare('SELECT * FROM pisos WHERE nombre = ?').get(nombre);
   if (existente) return res.status(200).json(existente);
 
-  // Los pisos manuales van siempre al final del listado, después de los estándar.
-  const { siguienteOrden } = db.prepare('SELECT COALESCE(MAX(orden), -1) + 1 AS siguienteOrden FROM pisos WHERE edificio_id = ?').get(edificio_id);
-  const { lastInsertRowid } = db.prepare('INSERT INTO pisos (edificio_id, nombre, orden) VALUES (?, ?, ?)').run(edificio_id, nombre, siguienteOrden);
+  const { siguienteOrden } = db.prepare('SELECT COALESCE(MAX(orden), -1) + 1 AS siguienteOrden FROM pisos').get();
+  const { lastInsertRowid } = db.prepare('INSERT INTO pisos (nombre, orden) VALUES (?, ?)').run(nombre, siguienteOrden);
   res.status(201).json(db.prepare('SELECT * FROM pisos WHERE id = ?').get(lastInsertRowid));
 });
 
-// GET /api/ubicaciones/areas?piso_id=
-router.get('/areas', auth, (req, res) => {
-  const { piso_id } = req.query;
-  if (!piso_id) return res.status(400).json({ error: 'piso_id es requerido' });
-  res.json(db.prepare('SELECT * FROM areas WHERE piso_id = ? ORDER BY nombre').all(piso_id));
+// PUT /api/ubicaciones/pisos/:id — Admin
+router.put('/pisos/:id', auth, requireRole('admin'), (req, res) => {
+  const { nombre } = req.body;
+  if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
+  if (!db.prepare('SELECT id FROM pisos WHERE id = ?').get(req.params.id)) {
+    return res.status(404).json({ error: 'Piso no encontrado' });
+  }
+
+  try {
+    db.prepare('UPDATE pisos SET nombre = ? WHERE id = ?').run(nombre, req.params.id);
+  } catch (err) {
+    if (siEsConflictoUnico(res, err, 'Ya existe un piso con ese nombre')) return;
+  }
+  res.json(db.prepare('SELECT * FROM pisos WHERE id = ?').get(req.params.id));
 });
 
-// POST /api/ubicaciones/areas — Admin
-router.post('/areas', auth, requireRole('admin'), (req, res) => {
-  const { piso_id, nombre } = req.body;
-  if (!piso_id || !nombre) return res.status(400).json({ error: 'piso_id y nombre son requeridos' });
+// DELETE /api/ubicaciones/pisos/:id — Admin. Bloqueado si tiene cámaras o NVRs asociados.
+router.delete('/pisos/:id', auth, requireRole('admin'), (req, res) => {
+  const { id } = req.params;
+  if (!db.prepare('SELECT id FROM pisos WHERE id = ?').get(id)) {
+    return res.status(404).json({ error: 'Piso no encontrado' });
+  }
 
-  const existente = db.prepare('SELECT * FROM areas WHERE piso_id = ? AND nombre = ?').get(piso_id, nombre);
+  const { camaras } = db.prepare('SELECT COUNT(*) AS camaras FROM camaras WHERE piso_id = ?').get(id);
+  const { nvrs } = db.prepare('SELECT COUNT(*) AS nvrs FROM nvrs WHERE piso_id = ?').get(id);
+  if (camaras > 0 || nvrs > 0) {
+    return res.status(409).json({ error: `No se puede borrar: tiene ${camaras} cámara(s) y ${nvrs} NVR(s) asociados.` });
+  }
+
+  db.prepare('DELETE FROM pisos WHERE id = ?').run(id);
+  res.status(204).end();
+});
+
+// GET /api/ubicaciones/areas — catálogo global (RF-04): no depende de
+// edificio ni piso, la misma área vale para cualquiera.
+router.get('/areas', auth, (req, res) => {
+  res.json(db.prepare(`
+    SELECT a.*, (SELECT COUNT(*) FROM camaras c WHERE c.area_id = a.id) AS cantidad_camaras
+    FROM areas a ORDER BY a.nombre
+  `).all());
+});
+
+// POST /api/ubicaciones/areas — Admin. Área global: una vez creada queda
+// disponible para elegir en la cámara de cualquier edificio y piso.
+router.post('/areas', auth, requireRole('admin'), (req, res) => {
+  const { nombre } = req.body;
+  if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
+
+  const existente = db.prepare('SELECT * FROM areas WHERE nombre = ?').get(nombre);
   if (existente) return res.status(200).json(existente);
 
-  const { lastInsertRowid } = db.prepare('INSERT INTO areas (piso_id, nombre) VALUES (?, ?)').run(piso_id, nombre);
+  const { lastInsertRowid } = db.prepare('INSERT INTO areas (nombre) VALUES (?)').run(nombre);
   res.status(201).json(db.prepare('SELECT * FROM areas WHERE id = ?').get(lastInsertRowid));
+});
+
+// PUT /api/ubicaciones/areas/:id — Admin
+router.put('/areas/:id', auth, requireRole('admin'), (req, res) => {
+  const { nombre } = req.body;
+  if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
+  if (!db.prepare('SELECT id FROM areas WHERE id = ?').get(req.params.id)) {
+    return res.status(404).json({ error: 'Área no encontrada' });
+  }
+
+  try {
+    db.prepare('UPDATE areas SET nombre = ? WHERE id = ?').run(nombre, req.params.id);
+  } catch (err) {
+    if (siEsConflictoUnico(res, err, 'Ya existe un área con ese nombre')) return;
+  }
+  res.json(db.prepare('SELECT * FROM areas WHERE id = ?').get(req.params.id));
+});
+
+// DELETE /api/ubicaciones/areas/:id — Admin. Bloqueado si alguna cámara la usa.
+router.delete('/areas/:id', auth, requireRole('admin'), (req, res) => {
+  const { id } = req.params;
+  if (!db.prepare('SELECT id FROM areas WHERE id = ?').get(id)) {
+    return res.status(404).json({ error: 'Área no encontrada' });
+  }
+
+  const { camaras } = db.prepare('SELECT COUNT(*) AS camaras FROM camaras WHERE area_id = ?').get(id);
+  if (camaras > 0) {
+    return res.status(409).json({ error: `No se puede borrar: la usan ${camaras} cámara(s).` });
+  }
+
+  db.prepare('DELETE FROM areas WHERE id = ?').run(id);
+  res.status(204).end();
 });
 
 module.exports = router;

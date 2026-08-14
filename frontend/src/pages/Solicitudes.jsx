@@ -16,6 +16,7 @@ export default function Solicitudes() {
   const [solicitudes, setSolicitudes] = useState([]);
   const [filtroEstado, setFiltroEstado] = useState('pendiente');
   const [seleccionadas, setSeleccionadas] = useState([]);
+  const [detalleCamara, setDetalleCamara] = useState(null);
 
   const cargar = () => {
     const params = filtroEstado ? { estado: filtroEstado } : {};
@@ -56,7 +57,7 @@ export default function Solicitudes() {
 
         {puedeResolver && filtroEstado === 'pendiente' && seleccionadas.length > 0 && (
           <>
-            <span className="text-muted small">{seleccionadas.length} seleccionada(s)</span>
+            <span className="text-body-secondary small">{seleccionadas.length} seleccionada(s)</span>
             <button className="btn btn-sm btn-success" onClick={() => resolverLote('aprobada')}>Aprobar seleccionadas</button>
             <button className="btn btn-sm btn-outline-danger" onClick={() => resolverLote('rechazada')}>Rechazar seleccionadas</button>
           </>
@@ -77,18 +78,21 @@ export default function Solicitudes() {
                   />
                 )}
                 <strong>{s.solicitante_nombre}</strong>
-                <span className="text-muted small">{s.solicitante_email}</span>
+                <span className="text-body-secondary small">{s.solicitante_email}</span>
               </div>
               <span className={`badge ${BADGE[s.estado] || 'bg-secondary'}`}>{ETIQUETAS[s.estado] || s.estado}</span>
             </div>
 
-            <p className="text-muted small mt-2 mb-1">{new Date(s.fecha_solicitud).toLocaleString()}</p>
+            <p className="text-body-secondary small mt-2 mb-1">{new Date(s.fecha_solicitud).toLocaleString()}</p>
             {s.comentario && <p className="small mb-2">{s.comentario}</p>}
 
             <ul className="list-unstyled small my-2">
               {s.camaras.map((c) => (
                 <li key={c.id}>
-                  <strong>{c.descripcion || c.hostname}</strong> — {c.edificio} · {c.piso} · {c.area}
+                  <button type="button" className="btn btn-link p-0 text-start align-baseline" onClick={() => setDetalleCamara(c)}>
+                    <strong>{c.descripcion || c.hostname}</strong>
+                  </button>
+                  {' '}— {c.edificio} · {c.piso} · {c.area}
                 </li>
               ))}
             </ul>
@@ -103,7 +107,53 @@ export default function Solicitudes() {
         </div>
       ))}
 
-      {solicitudes.length === 0 && <p className="text-muted">No hay solicitudes para este filtro.</p>}
+      {solicitudes.length === 0 && <p className="text-body-secondary">No hay solicitudes para este filtro.</p>}
+
+      {detalleCamara && (
+        <>
+          <div
+            className="modal d-block"
+            tabIndex="-1"
+            role="dialog"
+            onClick={(e) => { if (e.target === e.currentTarget) setDetalleCamara(null); }}
+          >
+            <div className="modal-dialog modal-dialog-centered" role="document">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h2 className="modal-title h5">{detalleCamara.descripcion || detalleCamara.hostname}</h2>
+                  <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setDetalleCamara(null)} />
+                </div>
+                <div className="modal-body">
+                  <div className="camera-thumb camera-thumb-lg mb-3">
+                    {detalleCamara.imagen_url ? (
+                      <img src={detalleCamara.imagen_url} alt={detalleCamara.descripcion || detalleCamara.hostname} />
+                    ) : (
+                      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <rect x="3" y="7" width="15" height="12" rx="2" /><path d="M18 10l4-2v10l-4-2" />
+                      </svg>
+                    )}
+                  </div>
+
+                  <dl className="row mb-0">
+                    <dt className="col-4 text-body-secondary fw-normal">Edificio</dt>
+                    <dd className="col-8">{detalleCamara.edificio}</dd>
+                    <dt className="col-4 text-body-secondary fw-normal">Piso</dt>
+                    <dd className="col-8">{detalleCamara.piso}</dd>
+                    <dt className="col-4 text-body-secondary fw-normal">Área</dt>
+                    <dd className="col-8">{detalleCamara.area}</dd>
+                    {detalleCamara.descripcion && (<><dt className="col-4 text-body-secondary fw-normal">Descripción</dt><dd className="col-8">{detalleCamara.descripcion}</dd></>)}
+                    {detalleCamara.observaciones && (<><dt className="col-4 text-body-secondary fw-normal">Observaciones</dt><dd className="col-8">{detalleCamara.observaciones}</dd></>)}
+                  </dl>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-outline-secondary" onClick={() => setDetalleCamara(null)}>Cerrar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="modal-backdrop show" />
+        </>
+      )}
     </Layout>
   );
 }

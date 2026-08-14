@@ -17,9 +17,10 @@ services:
       - app_data:/app/data
     networks:
       - sistema-camaras-network
-    # Corre las migraciones pendientes antes de levantar la API — el runner
-    # propio (src/migrate.js) es idempotente, así que es seguro en cada arranque.
-    command: sh -c "npm run migrate:up && npm start"
+    # Corre las migraciones pendientes y el alta del admin inicial antes de
+    # levantar la API — ambos son idempotentes, así que es seguro en cada
+    # arranque (ver src/migrate.js y src/seedAdmin.js).
+    command: sh -c "npm run migrate:up && npm run seed:admin && npm start"
 
   frontend:
     build:

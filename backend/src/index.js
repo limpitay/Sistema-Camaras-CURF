@@ -21,8 +21,10 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/usuarios', require('./routes/usuarios'));
 app.use('/api/ubicaciones', require('./routes/ubicaciones'));
 app.use('/api/camaras', require('./routes/camaras'));
+app.use('/api/nvrs', require('./routes/nvrs'));
 app.use('/api/solicitudes', require('./routes/solicitudes'));
 app.use('/api/accesos', require('./routes/accesos'));
+app.use('/api/cuentas-nvr', require('./routes/cuentasNvr'));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });

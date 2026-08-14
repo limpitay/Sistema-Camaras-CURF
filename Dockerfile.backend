@@ -1,5 +1,10 @@
 FROM node:20-slim
 
+# sqlite3 CLI para poder inspeccionar la base a mano (docker exec -it
+# sistema-camaras-api sqlite3 /app/data/camaras.db) — no lo usa la app en sí.
+RUN apt-get update && apt-get install -y --no-install-recommends sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY backend/package*.json ./

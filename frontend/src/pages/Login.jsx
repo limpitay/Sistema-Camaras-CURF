@@ -61,7 +61,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light">
+    <div className="min-vh-100 d-flex align-items-center justify-content-center">
       <div className="card shadow-sm border-0" style={{ width: '100%', maxWidth: 400 }}>
         <div className="card-body p-4">
           <div className="text-center mb-4">

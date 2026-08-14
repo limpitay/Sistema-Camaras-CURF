@@ -2,32 +2,19 @@ import { useEffect, useState } from 'react';
 import client from '../api/client';
 import Layout from '../components/Layout';
 import UbicacionSelector from '../components/UbicacionSelector';
-import { useAuth } from '../context/AuthContext';
 
-const ESTADOS = ['funcionando', 'a_reemplazar', 'nueva', 'dada_de_baja'];
-const ESTADO_BADGE = {
-  funcionando: 'bg-success',
-  a_reemplazar: 'bg-warning text-dark',
-  nueva: 'bg-info text-dark',
-  dada_de_baja: 'bg-body-secondary text-body',
-};
-const CAMARA_VACIA = { hostname: '', descripcion: '', ip: '', mac_address: '', switch_conectado: '', observaciones: '', nvr: '' };
+const ESTADO_LABEL = { activa: 'Activa', inactiva: 'Inactiva' };
+const ESTADO_BADGE = { activa: 'text-bg-success', inactiva: 'text-bg-secondary' };
 
-// RF-04/RF-05/RF-07: inventario completo, solo Admin puede crear/editar/dar
-// de baja. Sistemas-lectura ve la misma tabla, sin controles de edición.
+// RF-07: vista de solo lectura del inventario completo — Admin y
+// Sistemas-lectura ven la misma grilla. El alta/edición de cámaras se hizo
+// mover al panel CRUD (pestaña "Cámaras"), para no duplicar el mismo
+// formulario en dos pantallas.
 export default function InventarioAdmin() {
-  const { user } = useAuth();
-  const esAdmin = user?.rol === 'admin';
-
   const [camaras, setCamaras] = useState([]);
   const [filtroUbicacion, setFiltroUbicacion] = useState({ edificioId: null, pisoId: null, areaId: null });
   const [filtroEstado, setFiltroEstado] = useState('');
-
-  const [nuevaUbicacion, setNuevaUbicacion] = useState({ edificioId: null, pisoId: null, areaId: null });
-  const [nueva, setNueva] = useState(CAMARA_VACIA);
-  const [imagenArchivo, setImagenArchivo] = useState(null);
-  const [imagenUrl, setImagenUrl] = useState('');
-  const [error, setError] = useState('');
+  const [detalle, setDetalle] = useState(null);
 
   const cargar = () => {
     const params = {
@@ -41,38 +28,14 @@ export default function InventarioAdmin() {
 
   useEffect(cargar, [filtroUbicacion, filtroEstado]);
 
-  const crearCamara = async (e) => {
-    e.preventDefault();
-    setError('');
-    if (!nuevaUbicacion.areaId) {
-      setError('Elegí (o creá) edificio, piso y área para la cámara');
-      return;
-    }
-    try {
-      const datos = new FormData();
-      Object.entries(nueva).forEach(([campo, valor]) => datos.append(campo, valor));
-      datos.append('area_id', nuevaUbicacion.areaId);
-      if (imagenArchivo) datos.append('imagen', imagenArchivo);
-      else if (imagenUrl) datos.append('imagen_url', imagenUrl);
-
-      await client.post('/camaras', datos);
-      setNueva(CAMARA_VACIA);
-      setImagenArchivo(null);
-      setImagenUrl('');
-      cargar();
-    } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo crear la cámara');
-    }
-  };
-
-  const cambiarEstado = async (id, estado) => {
-    await client.patch(`/camaras/${id}/estado`, { estado });
-    cargar();
-  };
-
   return (
     <Layout>
-      <h1 className="h4 fw-bold mb-4">Inventario de cámaras</h1>
+      <div className="mb-4">
+        <h1 className="h4 fw-bold mb-1">Camaras</h1>
+        <p className="text-body-secondary mb-0">
+          {camaras.length} cámara{camaras.length === 1 ? '' : 's'} registrada{camaras.length === 1 ? '' : 's'}
+        </p>
+      </div>
 
       <div className="card shadow-sm mb-4">
         <div className="card-body">
@@ -81,102 +44,92 @@ export default function InventarioAdmin() {
               <UbicacionSelector {...filtroUbicacion} onChange={setFiltroUbicacion} />
             </div>
             <div className="col-12 col-lg-3">
+              <label className="form-label fw-semibold">Estado</label>
               <select className="form-select" value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
                 <option value="">Todos los estados</option>
-                {ESTADOS.map((e) => <option key={e} value={e}>{e}</option>)}
+                <option value="activa">Activa</option>
+                <option value="inactiva">Inactiva</option>
               </select>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="card shadow-sm">
-        <div className="table-responsive">
-          <table className="table table-hover align-middle mb-0">
-            <thead className="table-light">
-              <tr>
-                <th>Foto</th><th>Hostname</th><th>Descripción</th><th>IP</th><th>MAC</th>
-                <th>Edificio</th><th>Piso</th><th>Área</th>
-                <th>Switch</th><th>NVR</th><th>Estado</th><th>Origen</th>{esAdmin && <th>Acciones</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {camaras.map((c) => (
-                <tr key={c.id}>
-                  <td>
-                    {c.imagen_url && (
-                      <img src={c.imagen_url} alt={c.descripcion || c.hostname} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6 }} />
+      {camaras.length === 0 ? (
+        <div className="text-center text-body-secondary py-5">No hay cámaras que coincidan con los filtros.</div>
+      ) : (
+        <div className="camera-grid">
+          {camaras.map((c) => (
+            <div className="card camera-card shadow-sm" key={c.id}>
+              <div className="camera-thumb" role="button" onClick={() => setDetalle(c)}>
+                {c.imagen_url ? (
+                  <img src={c.imagen_url} alt={c.ubicacion || c.hostname} />
+                ) : (
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <rect x="3" y="7" width="15" height="12" rx="2" /><path d="M18 10l4-2v10l-4-2" />
+                  </svg>
+                )}
+                <span className={`badge ${ESTADO_BADGE[c.estado] || 'text-bg-secondary'} camera-estado-badge`}>
+                  {ESTADO_LABEL[c.estado] || c.estado}
+                </span>
+              </div>
+              <div className="card-body">
+                <div className="small text-body-secondary mb-1">{c.edificio} · {c.piso} · {c.area}</div>
+                {c.ubicacion && <div className="small mb-1">{c.ubicacion}</div>}
+                {c.observaciones && (
+                  <p className="small fst-italic border-start border-2 ps-2 text-body-secondary mb-0">{c.observaciones}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {detalle && (
+        <>
+          <div
+            className="modal d-block"
+            tabIndex="-1"
+            role="dialog"
+            onClick={(e) => { if (e.target === e.currentTarget) setDetalle(null); }}
+          >
+            <div className="modal-dialog modal-dialog-centered" role="document">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h2 className="modal-title h5">{detalle.hostname}</h2>
+                  <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setDetalle(null)} />
+                </div>
+                <div className="modal-body">
+                  <div className="camera-thumb camera-thumb-lg mb-3">
+                    {detalle.imagen_url ? (
+                      <img src={detalle.imagen_url} alt={detalle.ubicacion || detalle.hostname} />
+                    ) : (
+                      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <rect x="3" y="7" width="15" height="12" rx="2" /><path d="M18 10l4-2v10l-4-2" />
+                      </svg>
                     )}
-                  </td>
-                  <td>{c.hostname}</td><td>{c.descripcion}</td><td>{c.ip}</td><td>{c.mac_address}</td>
-                  <td>{c.edificio}</td><td>{c.piso}</td><td>{c.area}</td>
-                  <td>{c.switch_conectado}</td><td>{c.nvr}</td>
-                  <td><span className={`badge ${ESTADO_BADGE[c.estado] || 'bg-secondary'}`}>{c.estado}</span></td>
-                  <td>{c.origen}</td>
-                  {esAdmin && (
-                    <td>
-                      <select className="form-select form-select-sm" value={c.estado} onChange={(e) => cambiarEstado(c.id, e.target.value)}>
-                        {ESTADOS.map((e) => <option key={e} value={e}>{e}</option>)}
-                      </select>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {esAdmin && (
-        <div className="card shadow-sm mt-4">
-          <div className="card-body">
-            <h2 className="h6 fw-bold mb-3">Nueva cámara</h2>
-            <form onSubmit={crearCamara}>
-              <UbicacionSelector {...nuevaUbicacion} onChange={setNuevaUbicacion} permitirCrear />
-
-              <div className="row g-3 mt-1">
-                {Object.keys(CAMARA_VACIA).map((campo) => (
-                  <div className="col-12 col-md-3" key={campo}>
-                    <input
-                      className="form-control"
-                      placeholder={campo}
-                      value={nueva[campo]}
-                      onChange={(e) => setNueva((n) => ({ ...n, [campo]: e.target.value }))}
-                      required={campo === 'hostname'}
-                    />
+                    <span className={`badge ${ESTADO_BADGE[detalle.estado] || 'text-bg-secondary'} camera-estado-badge`}>
+                      {ESTADO_LABEL[detalle.estado] || detalle.estado}
+                    </span>
                   </div>
-                ))}
-              </div>
 
-              <div className="row g-3 mt-1">
-                <div className="col-12 col-md-4">
-                  <label className="form-label small fw-semibold">Foto (jpg o png)</label>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png"
-                    className="form-control"
-                    onChange={(e) => setImagenArchivo(e.target.files[0] || null)}
-                  />
-                </div>
-                <div className="col-12 col-md-4 d-flex align-items-end">
-                  <div className="w-100">
-                    <label className="form-label small fw-semibold">...o URL de una imagen ya hosteada</label>
-                    <input
-                      className="form-control"
-                      placeholder="https://..."
-                      value={imagenUrl}
-                      onChange={(e) => setImagenUrl(e.target.value)}
-                      disabled={!!imagenArchivo}
-                    />
-                  </div>
+                  <dl className="row mb-0">
+                    <dt className="col-4 text-body-secondary fw-normal">Edificio</dt>
+                    <dd className="col-8">{detalle.edificio}</dd>
+                    <dt className="col-4 text-body-secondary fw-normal">Piso</dt>
+                    <dd className="col-8">{detalle.piso}</dd>
+                    <dt className="col-4 text-body-secondary fw-normal">Área</dt>
+                    <dd className="col-8">{detalle.area}</dd>
+                    {detalle.ubicacion && (<><dt className="col-4 text-body-secondary fw-normal">Ubicación</dt><dd className="col-8">{detalle.ubicacion}</dd></>)}
+                    {detalle.descripcion && (<><dt className="col-4 text-body-secondary fw-normal">Descripción</dt><dd className="col-8">{detalle.descripcion}</dd></>)}
+                    {detalle.observaciones && (<><dt className="col-4 text-body-secondary fw-normal">Observaciones</dt><dd className="col-8">{detalle.observaciones}</dd></>)}
+                  </dl>
                 </div>
               </div>
-
-              {error && <div className="alert alert-danger small py-2 mt-3 mb-0">{error}</div>}
-              <button type="submit" className="btn btn-primary mt-3">Crear cámara</button>
-            </form>
+            </div>
           </div>
-        </div>
+          <div className="modal-backdrop show" />
+        </>
       )}
     </Layout>
   );
