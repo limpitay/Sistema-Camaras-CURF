@@ -58,7 +58,8 @@ backend/
   src/
     routes/        auth, usuarios, ubicaciones (edificios/pisos/areas), camaras, nvrs,
                     cuentasNvr (cuentas NVR/HikCentral y sus accesos), solicitudes, accesos
-    middleware/     auth (JWT), requireRole (por rol) y restringirRedLocal (por IP de LAN)
+    middleware/     auth (JWT), requireRole (por rol), restringirRedLocal (por IP de LAN)
+                    y upload (multer + nombrado de fotos de cámara, ver "Fotos de cámaras")
     mailer.js       envío del código de login por SMTP (o log si no hay SMTP configurado)
     utils/          notificaciones.js (RF-24/25/26 — todavía sin SMTP real conectado;
                     es un mailer aparte del de login, para avisos de solicitudes)
@@ -74,6 +75,12 @@ frontend/
     components/     Layout (nav por rol) y UbicacionSelector
     context/        AuthContext (login por código / Google / dev, sesión JWT)
 ```
+
+## Fotos de cámaras
+
+Las fotos subidas (RF-06) se guardan en `backend/data/uploads/camaras/` y se sirven en `/api/uploads/camaras/<archivo>`. El nombre de archivo no es un UUID: es `hostname_últimosDosOctetosDeIP.ext` (ej. `CAMCAPB26_0.172.jpg`), para poder ubicar la foto de una cámara a simple vista en la carpeta (`backend/src/middleware/upload.js`, función `nombreArchivoImagen`). Si el nombre calculado ya existe por otra cámara se le agrega un sufijo (`-2`, `-3`...); si es la propia cámara resubiendo su foto, se pisa el archivo anterior.
+
+Las fotos subidas antes de que existiera este criterio (guardadas con UUID) se renombraron una única vez con `cd backend && npm run renombrar:imagenes` (idempotente, seguro de correr de nuevo). Reemplazar una foto sin borrar la cámara todavía deja el archivo viejo huérfano en el disco — no hay limpieza automática de esos casos.
 
 ## Modelo de datos: notas sobre el esquema
 

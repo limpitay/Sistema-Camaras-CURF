@@ -812,7 +812,7 @@ export default function Crud() {
             role="dialog"
             onClick={(e) => { if (e.target === e.currentTarget) setDetalleCamara(null); }}
           >
-            <div className="modal-dialog modal-dialog-centered" role="document">
+            <div className="modal-dialog modal-dialog-centered" role="document" style={{ maxWidth: 750 }}>
               <div className="modal-content">
                 <div className="modal-header">
                   <h2 className="modal-title h5">{detalleCamara.hostname}</h2>
@@ -832,25 +832,25 @@ export default function Crud() {
                     </span>
                   </div>
 
-                  <dl className="row mb-0">
-                    <dt className="col-4 text-body-secondary fw-normal">Edificio</dt>
-                    <dd className="col-8">{detalleCamara.edificio}</dd>
-                    <dt className="col-4 text-body-secondary fw-normal">Piso</dt>
-                    <dd className="col-8">{detalleCamara.piso}</dd>
-                    <dt className="col-4 text-body-secondary fw-normal">Área</dt>
-                    <dd className="col-8">{detalleCamara.area}</dd>
-                    {detalleCamara.ubicacion && (<><dt className="col-4 text-body-secondary fw-normal">Ubicación</dt><dd className="col-8">{detalleCamara.ubicacion}</dd></>)}
-                    {detalleCamara.descripcion && (<><dt className="col-4 text-body-secondary fw-normal">Descripción</dt><dd className="col-8">{detalleCamara.descripcion}</dd></>)}
-                    {detalleCamara.marca && (<><dt className="col-4 text-body-secondary fw-normal">Marca</dt><dd className="col-8">{detalleCamara.marca}</dd></>)}
-                    {detalleCamara.modelo && (<><dt className="col-4 text-body-secondary fw-normal">Modelo</dt><dd className="col-8">{detalleCamara.modelo}</dd></>)}
-                    {detalleCamara.ip && (<><dt className="col-4 text-body-secondary fw-normal">IP</dt><dd className="col-8">{detalleCamara.ip}</dd></>)}
-                    {detalleCamara.mac_address && (<><dt className="col-4 text-body-secondary fw-normal">MAC</dt><dd className="col-8">{detalleCamara.mac_address}</dd></>)}
-                    {detalleCamara.switch_conectado && (<><dt className="col-4 text-body-secondary fw-normal">Switch</dt><dd className="col-8">{detalleCamara.switch_conectado}</dd></>)}
-                    {detalleCamara.usuario && (<><dt className="col-4 text-body-secondary fw-normal">Usuario</dt><dd className="col-8">{detalleCamara.usuario}</dd></>)}
-                    {detalleCamara.contrasena && (<><dt className="col-4 text-body-secondary fw-normal">Contraseña</dt><dd className="col-8">{detalleCamara.contrasena}</dd></>)}
-                    <dt className="col-4 text-body-secondary fw-normal">NVR</dt>
-                    <dd className="col-8">{detalleCamara.nvr || '—'}</dd>
-                    {detalleCamara.observaciones && (<><dt className="col-4 text-body-secondary fw-normal">Observaciones</dt><dd className="col-8">{detalleCamara.observaciones}</dd></>)}
+                  <dl className="mb-0" style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', columnGap: '1.5rem', rowGap: '0.5rem' }}>
+                    <dt className="text-body-secondary fw-normal text-nowrap">Edificio</dt>
+                    <dd className="mb-0">{detalleCamara.edificio}</dd>
+                    <dt className="text-body-secondary fw-normal text-nowrap">Piso</dt>
+                    <dd className="mb-0">{detalleCamara.piso}</dd>
+                    <dt className="text-body-secondary fw-normal text-nowrap">Área</dt>
+                    <dd className="mb-0">{detalleCamara.area}</dd>
+                    {detalleCamara.ubicacion && (<><dt className="text-body-secondary fw-normal text-nowrap">Ubicación</dt><dd className="mb-0">{detalleCamara.ubicacion}</dd></>)}
+                    {detalleCamara.descripcion && (<><dt className="text-body-secondary fw-normal text-nowrap">Descripción</dt><dd className="mb-0">{detalleCamara.descripcion}</dd></>)}
+                    {detalleCamara.marca && (<><dt className="text-body-secondary fw-normal text-nowrap">Marca</dt><dd className="mb-0">{detalleCamara.marca}</dd></>)}
+                    {detalleCamara.modelo && (<><dt className="text-body-secondary fw-normal text-nowrap">Modelo</dt><dd className="mb-0">{detalleCamara.modelo}</dd></>)}
+                    {detalleCamara.ip && (<><dt className="text-body-secondary fw-normal text-nowrap">IP</dt><dd className="mb-0">{detalleCamara.ip}</dd></>)}
+                    {detalleCamara.mac_address && (<><dt className="text-body-secondary fw-normal text-nowrap">MAC</dt><dd className="mb-0">{detalleCamara.mac_address}</dd></>)}
+                    {detalleCamara.switch_conectado && (<><dt className="text-body-secondary fw-normal text-nowrap">Switch</dt><dd className="mb-0">{detalleCamara.switch_conectado}</dd></>)}
+                    {detalleCamara.usuario && (<><dt className="text-body-secondary fw-normal text-nowrap">Usuario</dt><dd className="mb-0">{detalleCamara.usuario}</dd></>)}
+                    {detalleCamara.contrasena && (<><dt className="text-body-secondary fw-normal text-nowrap">Contraseña</dt><dd className="mb-0">{detalleCamara.contrasena}</dd></>)}
+                    <dt className="text-body-secondary fw-normal text-nowrap">NVR</dt>
+                    <dd className="mb-0">{detalleCamara.nvr || '—'}</dd>
+                    {detalleCamara.observaciones && (<><dt className="text-body-secondary fw-normal text-nowrap">Observaciones</dt><dd className="mb-0">{detalleCamara.observaciones}</dd></>)}
                   </dl>
                 </div>
                 <div className="modal-footer">

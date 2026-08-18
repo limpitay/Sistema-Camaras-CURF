@@ -39,4 +39,25 @@ const upload = multer({
   },
 });
 
-module.exports = { upload, UPLOADS_DIR };
+// Nombre buscable para la imagen: hostname + últimos 2 octetos de la IP
+// (ej. "CAMCAPB26_0.172") en vez de un UUID, para poder ubicar el archivo a
+// simple vista en la carpeta de uploads. Si `nombreActual` (imagen que ya
+// tenía la cámara) coincide con el candidato, se reutiliza ese nombre para
+// pisar la foto vieja; si no, se agrega un sufijo numérico para no pisar el
+// archivo de otra cámara que por casualidad tenga el mismo hostname+IP.
+function nombreArchivoImagen(hostname, ip, extension, nombreActual) {
+  const hostnameSano = (hostname || 'camara').replace(/[^A-Za-z0-9_-]/g, '') || 'camara';
+  const octetos = (ip || '').split('.').slice(-2);
+  const sufijoIp = octetos.length === 2 && octetos.every((o) => /^\d{1,3}$/.test(o)) ? octetos.join('.') : null;
+  const base = sufijoIp ? `${hostnameSano}_${sufijoIp}` : hostnameSano;
+
+  let candidato = `${base}${extension}`;
+  let contador = 2;
+  while (candidato !== nombreActual && fs.existsSync(path.join(UPLOADS_DIR, candidato))) {
+    candidato = `${base}-${contador}${extension}`;
+    contador += 1;
+  }
+  return candidato;
+}
+
+module.exports = { upload, UPLOADS_DIR, nombreArchivoImagen };

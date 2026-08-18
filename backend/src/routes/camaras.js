@@ -1,8 +1,10 @@
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const db = require('../db');
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
-const { upload } = require('../middleware/upload');
+const { upload, UPLOADS_DIR, nombreArchivoImagen } = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -87,6 +89,11 @@ router.post('/', auth, requireRole('admin'), upload.single('imagen'), (req, res)
     hostname, descripcion, ubicacion, marca, modelo, ip, mac_address, edificio_id, piso_id, area_id,
     nvr_id, switch_conectado, usuario, contrasena, observaciones, estado,
   } = req.body;
+  if (req.file) {
+    const nombreFinal = nombreArchivoImagen(hostname, ip, path.extname(req.file.filename));
+    fs.renameSync(req.file.path, path.join(UPLOADS_DIR, nombreFinal));
+    req.file.filename = nombreFinal;
+  }
   const imagen_url = req.file ? `/api/uploads/camaras/${req.file.filename}` : (req.body.imagen_url || null);
 
   if (!hostname || !edificio_id || !piso_id || !area_id) {
@@ -134,6 +141,14 @@ router.put('/:id', auth, requireRole('admin'), upload.single('imagen'), (req, re
     hostname, descripcion, ubicacion, marca, modelo, ip, mac_address, edificio_id, piso_id, area_id,
     nvr_id, switch_conectado, usuario, contrasena, observaciones, estado,
   } = req.body;
+  if (req.file) {
+    const hostnameFinal = hostname || actual.hostname;
+    const ipFinal = ip === undefined ? actual.ip : ip;
+    const nombreActual = actual.imagen_url ? path.basename(actual.imagen_url) : null;
+    const nombreFinal = nombreArchivoImagen(hostnameFinal, ipFinal, path.extname(req.file.filename), nombreActual);
+    fs.renameSync(req.file.path, path.join(UPLOADS_DIR, nombreFinal));
+    req.file.filename = nombreFinal;
+  }
   const imagen_url = req.file ? `/api/uploads/camaras/${req.file.filename}` : req.body.imagen_url;
 
   if (estado && !ESTADOS.includes(estado)) {
