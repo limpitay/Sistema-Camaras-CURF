@@ -5,6 +5,7 @@ import UbicacionSelector from '../components/UbicacionSelector';
 import { AREAS_SUGERIDAS } from '../constants/areasSugeridas';
 
 const TABS = [
+  { id: 'dashboard', label: 'Dashboard' },
   { id: 'camaras', label: 'Cámaras' },
   { id: 'nvrs', label: 'NVR' },
   { id: 'edificios', label: 'Edificios' },
@@ -13,6 +14,7 @@ const TABS = [
 ];
 
 const ESTADOS = ['activa', 'inactiva'];
+const SIN_MARCA = '__sin_marca__';
 const ESTADO_LABEL = { activa: 'Activa', inactiva: 'Inactiva' };
 const ESTADO_BADGE = { activa: 'text-bg-success', inactiva: 'text-bg-secondary' };
 
@@ -164,10 +166,10 @@ export default function Crud() {
   const [busquedaPisos, setBusquedaPisos] = useState('');
   const [filtroPisoTab, setFiltroPisoTab] = useState(FILTRO_VACIO);
   const [busquedaAreas, setBusquedaAreas] = useState('');
-  const [filtroAreaTab, setFiltroAreaTab] = useState(FILTRO_VACIO);
 
   const [modal, setModal] = useState(null);
   const [detalleCamara, setDetalleCamara] = useState(null);
+  const [nvrDetalle, setNvrDetalle] = useState(null);
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
 
@@ -301,9 +303,11 @@ export default function Crud() {
     if (filtroCam.pisoId && c.piso_id !== filtroCam.pisoId) return false;
     if (filtroCam.areaId && c.area_id !== filtroCam.areaId) return false;
     if (filtroCam.nvrId === 'sin' && c.nvr_id) return false;
-    if (filtroCam.nvrId && filtroCam.nvrId !== 'sin' && String(c.nvr_id) !== filtroCam.nvrId) return false;
+    if (filtroCam.nvrId === 'con' && !c.nvr_id) return false;
+    if (filtroCam.nvrId && filtroCam.nvrId !== 'sin' && filtroCam.nvrId !== 'con' && String(c.nvr_id) !== filtroCam.nvrId) return false;
     if (filtroCamEstado && c.estado !== filtroCamEstado) return false;
-    if (filtroCamMarca && c.marca !== filtroCamMarca) return false;
+    if (filtroCamMarca === SIN_MARCA && c.marca) return false;
+    if (filtroCamMarca && filtroCamMarca !== SIN_MARCA && c.marca !== filtroCamMarca) return false;
     return true;
   });
   const camarasOrdenadas = ordenIp
@@ -348,12 +352,43 @@ export default function Crud() {
     (!filtroPisoTab.edificioId && !filtroPisoTab.areaId && !filtroPisoTab.nvrId ? true : pisoTieneCamaraCoincidente(p.id))
   );
 
-  const areaTieneCamaraCoincidente = tieneCamaraCoincidente(camaras, 'area_id', filtroAreaTab);
-  const areasFiltradas = areas.filter((a) =>
-    coincideBusqueda(a, busquedaAreas, ['nombre']) &&
-    (!filtroAreaTab.areaId || a.id === filtroAreaTab.areaId) &&
-    (!filtroAreaTab.edificioId && !filtroAreaTab.pisoId && !filtroAreaTab.nvrId ? true : areaTieneCamaraCoincidente(a.id))
-  );
+  const areasFiltradas = areas.filter((a) => coincideBusqueda(a, busquedaAreas, ['nombre']));
+
+  // Dashboard (RF-04): "graba"/"no graba" no es un campo propio de la cámara
+  // — no es lo mismo que activa/inactiva (eso es de alta/baja en el panel de
+  // accesos, no dice si el equipo real está grabando). Una cámara sin NVR
+  // asignado no tiene dónde grabar, así que se toma nvr_id como el indicador.
+  const camarasGrabando = camaras.filter((c) => c.nvr_id);
+  const camarasSinGrabar = camaras.filter((c) => !c.nvr_id);
+
+  const contarPorMarca = (lista) => {
+    const mapa = {};
+    for (const c of lista) {
+      const valor = c.marca || SIN_MARCA;
+      mapa[valor] = (mapa[valor] || 0) + 1;
+    }
+    return Object.entries(mapa)
+      .map(([valor, cantidad]) => ({ valor, marca: valor === SIN_MARCA ? 'Sin marca' : valor, cantidad }))
+      .sort((a, b) => b.cantidad - a.cantidad);
+  };
+
+  const irACamarasFiltradas = (filtro) => {
+    setBusquedaCamaras('');
+    setFiltroCam({ ...FILTRO_VACIO, ...filtro.cam });
+    setFiltroCamEstado(filtro.estado ?? '');
+    setFiltroCamMarca(filtro.marca ?? '');
+    setTab('camaras');
+  };
+
+  const porMarca = contarPorMarca(camaras);
+  const maxPorMarca = porMarca[0]?.cantidad || 1;
+
+  const camarasDelNvrDetalle = nvrDetalle
+    ? camaras.filter((c) => (nvrDetalle.id === 'sin' ? !c.nvr_id : c.nvr_id === nvrDetalle.id))
+    : [];
+  const camarasSinNvr = camaras.filter((c) => !c.nvr_id);
+  const porMarcaDelNvrDetalle = contarPorMarca(camarasDelNvrDetalle);
+  const maxPorMarcaDelNvrDetalle = porMarcaDelNvrDetalle[0]?.cantidad || 1;
 
   return (
     <Layout>
@@ -372,6 +407,106 @@ export default function Crud() {
           </li>
         ))}
       </ul>
+
+      {tab === 'dashboard' && (
+        <div className="d-flex flex-column gap-3">
+          <div className="row g-3">
+            <div className="col-6 col-md-3">
+              <button type="button" className="card shadow-sm h-100 w-100 text-start dashboard-tile" onClick={() => irACamarasFiltradas({})}>
+                <div className="card-body">
+                  <div className="text-body-secondary small">Total cámaras</div>
+                  <div className="fs-3 fw-bold">{camaras.length}</div>
+                </div>
+              </button>
+            </div>
+            <div className="col-6 col-md-3">
+              <button type="button" className="card shadow-sm h-100 w-100 text-start dashboard-tile" onClick={() => irACamarasFiltradas({ cam: { nvrId: 'con' } })}>
+                <div className="card-body">
+                  <div className="text-body-secondary small">Grabando</div>
+                  <div className="fs-3 fw-bold text-success">{camarasGrabando.length}</div>
+                </div>
+              </button>
+            </div>
+            <div className="col-6 col-md-3">
+              <button type="button" className="card shadow-sm h-100 w-100 text-start dashboard-tile" onClick={() => irACamarasFiltradas({ cam: { nvrId: 'sin' } })}>
+                <div className="card-body">
+                  <div className="text-body-secondary small">No graban</div>
+                  <div className="fs-3 fw-bold text-body-secondary">{camarasSinGrabar.length}</div>
+                </div>
+              </button>
+            </div>
+            <div className="col-6 col-md-3">
+              <button type="button" className="card shadow-sm h-100 w-100 text-start dashboard-tile" onClick={() => setTab('nvrs')}>
+                <div className="card-body">
+                  <div className="text-body-secondary small">NVRs</div>
+                  <div className="fs-3 fw-bold">{nvrs.length}</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <div className="row g-3">
+            <div className="col-12 col-lg-6">
+              <div className="card shadow-sm h-100">
+                <div className="card-header fw-semibold">
+                  Cámaras por marca <span className="text-body-secondary fw-normal small">(clic para filtrar)</span>
+                </div>
+                <div className="card-body">
+                  {porMarca.map(({ marca, valor, cantidad }) => (
+                    <button
+                      key={valor}
+                      type="button"
+                      className="btn p-0 border-0 bg-transparent w-100 text-start mb-2 dashboard-marca"
+                      onClick={() => irACamarasFiltradas({ marca: valor })}
+                    >
+                      <div className="d-flex justify-content-between small mb-1">
+                        <span>{marca}</span>
+                        <span className="text-body-secondary">{cantidad}</span>
+                      </div>
+                      <div className="progress" role="progressbar" aria-label={marca} aria-valuenow={cantidad} aria-valuemin={0} aria-valuemax={maxPorMarca} style={{ height: 8 }}>
+                        <div className="progress-bar" style={{ width: `${(cantidad / maxPorMarca) * 100}%` }} />
+                      </div>
+                    </button>
+                  ))}
+                  {porMarca.length === 0 && <p className="text-body-secondary mb-0">Todavía no hay cámaras cargadas</p>}
+                </div>
+              </div>
+            </div>
+
+            <div className="col-12 col-lg-6">
+              <div className="card shadow-sm h-100">
+                <div className="card-header fw-semibold">
+                  NVR <span className="text-body-secondary fw-normal small">(clic para ver detalle)</span>
+                </div>
+                <div className="list-group list-group-flush" style={{ maxHeight: 420, overflowY: 'auto' }}>
+                  {nvrs.map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                      onClick={() => setNvrDetalle(n)}
+                    >
+                      <span>{n.hostname}</span>
+                      <span className="badge text-bg-secondary rounded-pill">{camaras.filter((c) => c.nvr_id === n.id).length}</span>
+                    </button>
+                  ))}
+                  {camarasSinNvr.length > 0 && (
+                    <button
+                      type="button"
+                      className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                      onClick={() => setNvrDetalle({ id: 'sin', hostname: 'Sin NVR' })}
+                    >
+                      <span className="text-body-secondary fst-italic">Sin NVR</span>
+                      <span className="badge text-bg-secondary rounded-pill">{camarasSinNvr.length}</span>
+                    </button>
+                  )}
+                  {nvrs.length === 0 && camarasSinNvr.length === 0 && <div className="list-group-item text-body-secondary">Todavía no hay NVRs cargados</div>}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {tab === 'camaras' && (
         <div className="card shadow-sm">
@@ -393,6 +528,7 @@ export default function Crud() {
                   <select className="form-select" value={filtroCamMarca} onChange={(e) => setFiltroCamMarca(e.target.value)}>
                     <option value="">Todas las marcas</option>
                     {marcasDisponibles.map((m) => <option key={m} value={m}>{m}</option>)}
+                    <option value={SIN_MARCA}>Sin marca</option>
                   </select>
                 </div>
                 <div className="col-6 col-md-3">
@@ -581,14 +717,10 @@ export default function Crud() {
             <span className="fw-semibold">Áreas <span className="text-body-secondary fw-normal">({areasFiltradas.length} de {areas.length})</span></span>
             <button className="btn btn-primary btn-sm" onClick={() => abrirModalArea()}>+ Agregar</button>
           </div>
-          <FiltrosCrud
-            busqueda={busquedaAreas}
-            onBusqueda={setBusquedaAreas}
-            placeholderBusqueda="Nombre del área..."
-            filtro={filtroAreaTab}
-            onFiltro={setFiltroAreaTab}
-            nvrs={nvrs}
-          />
+          <div className="card-body border-bottom">
+            <label className="form-label fw-semibold">Buscar</label>
+            <input className="form-control" placeholder="Nombre del área..." value={busquedaAreas} onChange={(e) => setBusquedaAreas(e.target.value)} />
+          </div>
           <div className="table-responsive">
             <table className="table table-hover align-middle mb-0">
               <thead className="table-light">
@@ -856,6 +988,56 @@ export default function Crud() {
                 <div className="modal-footer">
                   <button type="button" className="btn btn-outline-secondary" onClick={() => setDetalleCamara(null)}>Cerrar</button>
                   <button type="button" className="btn btn-primary" onClick={() => { const c = detalleCamara; setDetalleCamara(null); abrirModalCamara(c); }}>Editar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="modal-backdrop show" />
+        </>
+      )}
+
+      {nvrDetalle && (
+        <>
+          <div
+            className="modal d-block"
+            tabIndex="-1"
+            role="dialog"
+            onClick={(e) => { if (e.target === e.currentTarget) setNvrDetalle(null); }}
+          >
+            <div className="modal-dialog modal-dialog-centered" role="document">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h2 className="modal-title h5">{nvrDetalle.hostname}</h2>
+                  <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setNvrDetalle(null)} />
+                </div>
+                <div className="modal-body">
+                  <div className="mb-3">
+                    <span className="text-body-secondary">Cámaras totales: </span>
+                    <span className="fw-semibold">{camarasDelNvrDetalle.length}</span>
+                  </div>
+                  {porMarcaDelNvrDetalle.map(({ marca, cantidad }) => (
+                    <div key={marca} className="mb-2">
+                      <div className="d-flex justify-content-between small mb-1">
+                        <span>{marca}</span>
+                        <span className="text-body-secondary">{cantidad}</span>
+                      </div>
+                      <div className="progress" role="progressbar" aria-label={marca} aria-valuenow={cantidad} aria-valuemin={0} aria-valuemax={maxPorMarcaDelNvrDetalle} style={{ height: 8 }}>
+                        <div className="progress-bar" style={{ width: `${(cantidad / maxPorMarcaDelNvrDetalle) * 100}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                  {porMarcaDelNvrDetalle.length === 0 && <p className="text-body-secondary mb-0">Este NVR todavía no tiene cámaras asignadas</p>}
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-outline-secondary" onClick={() => setNvrDetalle(null)}>Cerrar</button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={camarasDelNvrDetalle.length === 0}
+                    onClick={() => { const id = nvrDetalle.id; setNvrDetalle(null); irACamarasFiltradas({ cam: { nvrId: id === 'sin' ? 'sin' : String(id) } }); }}
+                  >
+                    Ver cámaras
+                  </button>
                 </div>
               </div>
             </div>

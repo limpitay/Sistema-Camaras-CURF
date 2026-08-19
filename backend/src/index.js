@@ -2,6 +2,7 @@ require('dotenv').config({ quiet: true });
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const db = require('./db');
 const { UPLOADS_DIR } = require('./middleware/upload');
 
 const app = express();
@@ -54,6 +55,21 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Backend corriendo en http://localhost:${PORT}`);
 });
+
+// Sin esto, un `docker stop`/`docker compose restart` mata el proceso con
+// SIGTERM y, si Node no atiende la señal, el contenedor lo termina a la
+// fuerza (SIGKILL) pasado el grace period. SQLite en modo WAL puede tener
+// escrituras confirmadas que todavía viven solo en camaras.db-wal, sin
+// volcar al archivo principal — un corte abrupto ahí se pierde esos cambios
+// (nos pasó). db.close() fuerza el checkpoint final antes de salir.
+function apagar() {
+  server.close(() => {
+    db.close();
+    process.exit(0);
+  });
+}
+process.on('SIGTERM', apagar);
+process.on('SIGINT', apagar);

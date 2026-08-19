@@ -94,3 +94,17 @@ body {
   top: 10px;
   right: 10px;
 }
+
+.dashboard-tile {
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.dashboard-tile:hover {
+  transform: translateY(-2px);
+  border-color: var(--bs-primary) !important;
+}
+
+.dashboard-marca:hover .progress-bar {
+  background-color: var(--bs-primary);
+  filter: brightness(1.2);
+}

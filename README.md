@@ -82,6 +82,47 @@ Las fotos subidas (RF-06) se guardan en `backend/data/uploads/camaras/` y se sir
 
 Las fotos subidas antes de que existiera este criterio (guardadas con UUID) se renombraron una única vez con `cd backend && npm run renombrar:imagenes` (idempotente, seguro de correr de nuevo). Reemplazar una foto sin borrar la cámara todavía deja el archivo viejo huérfano en el disco — no hay limpieza automática de esos casos.
 
+## SQLite en modo WAL sobre bind mount de Windows — cuidado al reiniciar
+
+`camaras.db` usa `journal_mode = WAL` (`backend/src/db.js`). Sobre un bind mount de Windows (Docker Desktop), esto tiene dos efectos a tener en cuenta:
+
+- **Una segunda conexión al archivo mientras la API está corriendo puede fallar** con `SQLITE_CANTOPEN` ("unable to open database file") — pasa con `sqlite3` CLI, con una segunda instancia de `better-sqlite3`, o con el panel SQLite de VS Code si coincide con el momento justo. No es corrupción, es una limitación del filesystem compartido con el modo WAL. Para leer/escribir sin pelear con esto, hacelo a través de la propia API (loguearse con `POST /api/auth/dev-login` en desarrollo y pegarle a los endpoints), no abriendo el `.db` por afuera.
+- **Un corte abrupto del proceso puede perder escrituras recientes** que todavía estaban solo en `camaras.db-wal` sin volcarse al archivo principal (nos pasó dos veces: perdió cambios de `imagen_url` y de `marca` después de un `docker stop`/rebuild). Por eso `backend/src/index.js` atiende `SIGTERM`/`SIGINT` y cierra la conexión SQLite prolijamente (fuerza el checkpoint) antes de salir. Si alguna vez hay que matar el contenedor a la fuerza (`docker kill`, corte de luz, etc.), verificar después que los últimos cambios hayan quedado guardados.
+- Si necesitás copiar `camaras.db` para inspeccionarlo aparte (no para restaurar), copiá también `camaras.db-wal` y `camaras.db-shm` si existen — copiar solo el archivo principal puede dar una foto vieja, sin los últimos cambios.
+
+## Backups
+
+`scripts/backup-datos.ps1` copia `backend/data/` completo (base + `.env`) a `D:\BACKUP Sistema de Camaras CURF\<fecha>\` y borra automáticamente los backups de más de 30 días. Está programado con el Programador de tareas de Windows (`scripts/instalar-backup.ps1`, se corre una sola vez para dejarlo armado) para correr lunes/martes/jueves/viernes a las 7:00 am. Para correrlo a mano: doble clic en `scripts/ejecutar-backup-ahora.bat`.
+
+Ese backup queda en un disco interno de la misma PC — protege contra que se rompa el disco `C:`, pero no contra que se pierda la PC entera (incendio, robo). Para eso hace falta copiar periódicamente esa carpeta a algo fuera de la máquina (OneDrive, un disco externo).
+
+## Migrar a otra máquina / recuperar de un backup
+
+`backend/data/` (la base `camaras.db` y las fotos subidas) y `.env` **no están en git a propósito** — son datos/secretos, no código (ver `.gitignore`). Clonar el repo en una PC nueva da el código solo; para tener todo lo que hay hoy hace falta restaurar esos dos del backup.
+
+1. Clonar el repo y copiar la config:
+   ```bash
+   git clone <url-del-repo>
+   cd Sistema-Camaras-CURF
+   cp .env.example .env   # completar con los valores reales, o pisar con el .env del backup (paso 3)
+   ```
+2. Instalar Docker Desktop en la PC nueva si no lo tiene.
+3. Restaurar los datos desde el backup más reciente (`D:\BACKUP Sistema de Camaras CURF\<fecha-más-nueva>\` u otra copia que se haya sacado de ahí):
+   ```powershell
+   # Desde la raíz del repo clonado
+   New-Item -ItemType Directory -Force backend\data
+   Copy-Item "<carpeta-backup>\camaras.db" backend\data\ -Force
+   Copy-Item "<carpeta-backup>\uploads" backend\data\ -Recurse -Force
+   Copy-Item "<carpeta-backup>\.env" . -Force   # si se quiere reusar el .env del backup en vez de completar uno nuevo
+   ```
+4. Levantar todo:
+   ```bash
+   docker compose up --build -d
+   ```
+   Las migraciones corren solas contra la base restaurada (son idempotentes, no pisan datos). No hace falta correr `seedAdmin` de nuevo si ya hay usuarios en la base restaurada.
+5. Verificar en `http://localhost:8088` que entra y que el inventario de cámaras está completo.
+6. Si se quiere, volver a armar el backup automático en la PC nueva: `scripts/instalar-backup.ps1` (ajustar la ruta `D:\BACKUP...` dentro de `scripts/backup-datos.ps1` si el disco de destino en la PC nueva es otro).
+
 ## Modelo de datos: notas sobre el esquema
 
 - `edificios`, `pisos` y `areas` son catálogos **globales e independientes entre sí** (no una jerarquía edificio→piso→área): un piso no pertenece a un edificio puntual, ni un área a un piso. Cámaras y NVRs referencian directamente `edificio_id`, `piso_id` y `area_id` cada uno. Se eligió así porque un piso (ej. "1er Piso") o un área (ej. "Farmacia") se repiten igual en varios edificios, y duplicarlos por edificio era puro ruido para cargar datos.
