@@ -83,10 +83,17 @@ body {
 }
 
 .camera-thumb-lg {
-  height: 320px;
+  height: 520px;
   border-radius: $border-radius;
   border-bottom: none;
   cursor: default;
+}
+
+// El thumbnail chico usa "cover" (recorta para llenar el cuadrado), pero acá
+// en el modal de detalle importa ver la foto completa, no que quede prolija
+// — "contain" no recorta nunca, deja franjas vacías arriba/abajo si hace falta.
+.camera-thumb-lg img {
+  object-fit: contain;
 }
 
 .camera-estado-badge {
@@ -104,7 +111,12 @@ body {
   border-color: var(--bs-primary) !important;
 }
 
-.dashboard-marca:hover .progress-bar {
-  background-color: var(--bs-primary);
-  filter: brightness(1.2);
+.dashboard-marca {
+  border-radius: $border-radius-sm;
+  padding: 0.25rem 0.4rem !important;
+  transition: background-color 0.15s;
+}
+
+.dashboard-marca:hover {
+  background-color: var(--bs-tertiary-bg) !important;
 }

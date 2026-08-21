@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import client from '../api/client';
 import Layout from '../components/Layout';
 import UbicacionSelector from '../components/UbicacionSelector';
+import NavModal from '../components/NavModal';
 import { AREAS_SUGERIDAS } from '../constants/areasSugeridas';
 
 const TABS = [
@@ -15,6 +16,13 @@ const TABS = [
 
 const ESTADOS = ['activa', 'inactiva'];
 const SIN_MARCA = '__sin_marca__';
+// Paleta categórica para el gráfico de torta de "Cámaras por marca" — azul y
+// naranja, validados con scripts/validate_palette.js de la skill de dataviz
+// (separación CVD, piso de contraste y banda de luminosidad, los 3 en verde
+// sobre el fondo oscuro del panel). El azul institucional del tema ($primary)
+// no pasa el piso de contraste como marca de gráfico chico, por eso son
+// colores aparte, no --bs-primary.
+const COLORES_MARCA = ['#3987e5', '#d95926', '#199e70', '#c98500'];
 const ESTADO_LABEL = { activa: 'Activa', inactiva: 'Inactiva' };
 const ESTADO_BADGE = { activa: 'text-bg-success', inactiva: 'text-bg-secondary' };
 
@@ -97,37 +105,6 @@ function FiltrosCrud({ busqueda, onBusqueda, placeholderBusqueda, filtro, onFilt
   );
 }
 
-// Flechas fijas a los costados de la pantalla para hojear el detalle de una
-// fila sin cerrar el modal — se ocultan solas en el extremo de la lista.
-function NavModal({ onAnterior, onSiguiente }) {
-  return (
-    <>
-      {onAnterior && (
-        <button
-          type="button"
-          className="btn btn-light rounded-circle shadow"
-          aria-label="Anterior"
-          style={{ position: 'fixed', left: 20, top: '50%', transform: 'translateY(-50%)', zIndex: 1060, width: 44, height: 44 }}
-          onClick={onAnterior}
-        >
-          ‹
-        </button>
-      )}
-      {onSiguiente && (
-        <button
-          type="button"
-          className="btn btn-light rounded-circle shadow"
-          aria-label="Siguiente"
-          style={{ position: 'fixed', right: 20, top: '50%', transform: 'translateY(-50%)', zIndex: 1060, width: 44, height: 44 }}
-          onClick={onSiguiente}
-        >
-          ›
-        </button>
-      )}
-    </>
-  );
-}
-
 // ¿Hay al menos una cámara que sea de esta fila (campoPropio=valorPropio, ej.
 // area_id=3) y que además cumpla el resto de los filtros activos? Sirve para
 // filtrar Edificios/Pisos/Áreas/NVR por dimensiones que no tienen como campo
@@ -155,6 +132,7 @@ export default function Crud() {
   const [areas, setAreas] = useState([]);
 
   const [busquedaCamaras, setBusquedaCamaras] = useState('');
+  const [vistaCamaras, setVistaCamaras] = useState('tabla');
   const [ordenIp, setOrdenIp] = useState(null); // null | 'asc' | 'desc'
   const [filtroCam, setFiltroCam] = useState(FILTRO_VACIO);
   const [filtroCamEstado, setFiltroCamEstado] = useState('');
@@ -354,6 +332,7 @@ export default function Crud() {
 
   const areasFiltradas = areas.filter((a) => coincideBusqueda(a, busquedaAreas, ['nombre']));
 
+
   // Dashboard (RF-04): "graba"/"no graba" no es un campo propio de la cámara
   // — no es lo mismo que activa/inactiva (eso es de alta/baja en el panel de
   // accesos, no dice si el equipo real está grabando). Una cámara sin NVR
@@ -381,7 +360,25 @@ export default function Crud() {
   };
 
   const porMarca = contarPorMarca(camaras);
-  const maxPorMarca = porMarca[0]?.cantidad || 1;
+
+  // El color de cada marca sale de su nombre (orden alfabético), no de su
+  // lugar en el ranking de porMarca — si no, el día que Hikvision supere a
+  // Dahua en cantidad, las dos intercambiarían de color entre un refresh y
+  // el otro, y eso rompe la asociación color→marca que ya aprendió el ojo.
+  const marcasParaColor = [...new Set(camaras.map((c) => c.marca || 'Sin marca'))].sort();
+  const colorPorMarca = Object.fromEntries(marcasParaColor.map((m, i) => [m, COLORES_MARCA[i % COLORES_MARCA.length]]));
+
+  const gradienteMarca = (() => {
+    if (camaras.length === 0) return null;
+    let acumulado = 0;
+    const paradas = porMarca.map(({ marca, cantidad }) => {
+      const desde = (acumulado / camaras.length) * 100;
+      acumulado += cantidad;
+      const hasta = (acumulado / camaras.length) * 100;
+      return `${colorPorMarca[marca]} ${desde}% ${hasta}%`;
+    });
+    return `conic-gradient(${paradas.join(', ')})`;
+  })();
 
   const camarasDelNvrDetalle = nvrDetalle
     ? camaras.filter((c) => (nvrDetalle.id === 'sin' ? !c.nvr_id : c.nvr_id === nvrDetalle.id))
@@ -452,23 +449,32 @@ export default function Crud() {
                   Cámaras por marca <span className="text-body-secondary fw-normal small">(clic para filtrar)</span>
                 </div>
                 <div className="card-body">
-                  {porMarca.map(({ marca, valor, cantidad }) => (
-                    <button
-                      key={valor}
-                      type="button"
-                      className="btn p-0 border-0 bg-transparent w-100 text-start mb-2 dashboard-marca"
-                      onClick={() => irACamarasFiltradas({ marca: valor })}
-                    >
-                      <div className="d-flex justify-content-between small mb-1">
-                        <span>{marca}</span>
-                        <span className="text-body-secondary">{cantidad}</span>
-                      </div>
-                      <div className="progress" role="progressbar" aria-label={marca} aria-valuenow={cantidad} aria-valuemin={0} aria-valuemax={maxPorMarca} style={{ height: 8 }}>
-                        <div className="progress-bar" style={{ width: `${(cantidad / maxPorMarca) * 100}%` }} />
-                      </div>
-                    </button>
-                  ))}
-                  {porMarca.length === 0 && <p className="text-body-secondary mb-0">Todavía no hay cámaras cargadas</p>}
+                  {porMarca.length > 0 ? (
+                    <div className="d-flex align-items-center gap-4 flex-wrap">
+                      <div
+                        role="img"
+                        aria-label={`Cámaras por marca: ${porMarca.map((m) => `${m.marca} ${m.cantidad}`).join(', ')}`}
+                        style={{ width: 160, height: 160, borderRadius: '50%', background: gradienteMarca, flexShrink: 0 }}
+                      />
+                      <ul className="list-unstyled mb-0 flex-grow-1">
+                        {porMarca.map(({ marca, valor, cantidad }) => (
+                          <li key={valor} className="mb-2">
+                            <button
+                              type="button"
+                              className="btn p-0 border-0 bg-transparent w-100 d-flex align-items-center gap-2 dashboard-marca"
+                              onClick={() => irACamarasFiltradas({ marca: valor })}
+                            >
+                              <span style={{ width: 14, height: 14, borderRadius: 3, background: colorPorMarca[marca], flexShrink: 0 }} />
+                              <span>{marca}</span>
+                              <span className="text-body-secondary ms-auto">{cantidad} ({Math.round((cantidad / camaras.length) * 100)}%)</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="text-body-secondary mb-0">Todavía no hay cámaras cargadas</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -510,9 +516,27 @@ export default function Crud() {
 
       {tab === 'camaras' && (
         <div className="card shadow-sm">
-          <div className="card-header d-flex justify-content-between align-items-center">
+          <div className="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span className="fw-semibold">Cámaras <span className="text-body-secondary fw-normal">({camarasFiltradas.length} de {camaras.length})</span></span>
-            <button className="btn btn-primary btn-sm" onClick={() => abrirModalCamara()}>+ Agregar</button>
+            <div className="d-flex gap-2">
+              <div className="btn-group" role="group">
+                <button
+                  type="button"
+                  className={`btn btn-sm ${vistaCamaras === 'tabla' ? 'btn-primary' : 'btn-outline-primary'}`}
+                  onClick={() => setVistaCamaras('tabla')}
+                >
+                  Tabla
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${vistaCamaras === 'tarjetas' ? 'btn-primary' : 'btn-outline-primary'}`}
+                  onClick={() => setVistaCamaras('tarjetas')}
+                >
+                  Tarjetas
+                </button>
+              </div>
+              <button className="btn btn-primary btn-sm" onClick={() => abrirModalCamara()}>+ Agregar</button>
+            </div>
           </div>
           <FiltrosCrud
             busqueda={busquedaCamaras}
@@ -544,41 +568,74 @@ export default function Crud() {
               </>
             )}
           />
-          <div className="table-responsive">
-            <table className="table table-hover align-middle mb-0">
-              <thead className="table-light">
-                <tr>
-                  <th>Hostname</th>
-                  <th role="button" onClick={toggleOrdenIp} style={{ cursor: 'pointer', userSelect: 'none' }}>
-                    IP {ordenIp === 'asc' ? '▲' : ordenIp === 'desc' ? '▼' : ''}
-                  </th>
-                  <th>Edificio</th><th>Piso</th><th>Área</th><th>Marca</th><th>Estado</th><th>NVR</th><th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {camarasOrdenadas.map((c) => (
-                  <tr key={c.id} role="button" onClick={() => setDetalleCamara(c)} style={{ cursor: 'pointer' }}>
-                    <td>{c.hostname}</td>
-                    <td>{c.ip || '—'}</td>
-                    <td>{c.edificio}</td>
-                    <td>{c.piso}</td>
-                    <td>{c.area}</td>
-                    <td>{c.marca || '—'}</td>
-                    <td><span className={`badge ${ESTADO_BADGE[c.estado] || 'text-bg-secondary'}`}>{ESTADO_LABEL[c.estado] || c.estado}</span></td>
-                    <td>{c.nvr || '—'}</td>
-                    <td className="text-end">
-                      <button className="btn btn-sm btn-outline-secondary" onClick={(e) => { e.stopPropagation(); abrirModalCamara(c); }}>Editar</button>
-                    </td>
+          {vistaCamaras === 'tabla' ? (
+            <div className="table-responsive">
+              <table className="table table-hover align-middle mb-0">
+                <thead className="table-light">
+                  <tr>
+                    <th>Hostname</th>
+                    <th role="button" onClick={toggleOrdenIp} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                      IP {ordenIp === 'asc' ? '▲' : ordenIp === 'desc' ? '▼' : ''}
+                    </th>
+                    <th>Edificio</th><th>Piso</th><th>Área</th><th>Marca</th><th>Estado</th><th>NVR</th><th></th>
                   </tr>
-                ))}
-                {camarasFiltradas.length === 0 && (
-                  <tr><td colSpan={9} className="text-body-secondary">
-                    {camaras.length === 0 ? 'Todavía no hay cámaras cargadas' : 'Ninguna cámara coincide con la búsqueda/filtros'}
-                  </td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {camarasOrdenadas.map((c) => (
+                    <tr key={c.id} role="button" onClick={() => setDetalleCamara(c)} style={{ cursor: 'pointer' }}>
+                      <td>{c.hostname}</td>
+                      <td>{c.ip || '—'}</td>
+                      <td>{c.edificio}</td>
+                      <td>{c.piso}</td>
+                      <td>{c.area}</td>
+                      <td>{c.marca || '—'}</td>
+                      <td><span className={`badge ${ESTADO_BADGE[c.estado] || 'text-bg-secondary'}`}>{ESTADO_LABEL[c.estado] || c.estado}</span></td>
+                      <td>{c.nvr || '—'}</td>
+                      <td className="text-end">
+                        <button className="btn btn-sm btn-outline-secondary" onClick={(e) => { e.stopPropagation(); abrirModalCamara(c); }}>Editar</button>
+                      </td>
+                    </tr>
+                  ))}
+                  {camarasFiltradas.length === 0 && (
+                    <tr><td colSpan={9} className="text-body-secondary">
+                      {camaras.length === 0 ? 'Todavía no hay cámaras cargadas' : 'Ninguna cámara coincide con la búsqueda/filtros'}
+                    </td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="camera-grid p-3">
+              {camarasOrdenadas.map((c) => (
+                <div className="card camera-card shadow-sm" key={c.id} role="button" onClick={() => setDetalleCamara(c)}>
+                  <div className="camera-thumb">
+                    {c.imagen_url ? (
+                      <img src={c.imagen_url} alt={c.hostname} />
+                    ) : (
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <rect x="3" y="7" width="15" height="12" rx="2" /><path d="M18 10l4-2v10l-4-2" />
+                      </svg>
+                    )}
+                    <span className={`badge ${ESTADO_BADGE[c.estado] || 'text-bg-secondary'} camera-estado-badge`}>
+                      {ESTADO_LABEL[c.estado] || c.estado}
+                    </span>
+                  </div>
+                  <div className="card-body">
+                    <div className="fw-semibold mb-1">{c.hostname}</div>
+                    <div className="small text-body-secondary mb-1">{c.ip || '—'}</div>
+                    <div className="small text-body-secondary mb-1">{c.piso} · {c.edificio}</div>
+                    <div className="small text-body-secondary mb-1">{c.area}</div>
+                    <div className="small text-body-secondary">{c.marca || '—'} {c.nvr ? `· ${c.nvr}` : ''}</div>
+                  </div>
+                </div>
+              ))}
+              {camarasFiltradas.length === 0 && (
+                <p className="text-body-secondary mb-0">
+                  {camaras.length === 0 ? 'Todavía no hay cámaras cargadas' : 'Ninguna cámara coincide con la búsqueda/filtros'}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

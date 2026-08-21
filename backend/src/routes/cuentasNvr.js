@@ -47,13 +47,14 @@ router.get('/:id', auth, requireRole('admin', 'sistemas_lectura'), (req, res) =>
 
 // POST /api/cuentas-nvr — Admin
 router.post('/', auth, requireRole('admin'), (req, res) => {
-  const { nombre, usuario_id } = req.body;
+  const { nombre, usuario_id, contrasena } = req.body;
   if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
 
   const existente = db.prepare('SELECT * FROM cuentas_nvr WHERE nombre = ?').get(nombre);
   if (existente) return res.status(200).json(existente);
 
-  const { lastInsertRowid } = db.prepare('INSERT INTO cuentas_nvr (nombre, usuario_id) VALUES (?, ?)').run(nombre, usuario_id || null);
+  const { lastInsertRowid } = db.prepare('INSERT INTO cuentas_nvr (nombre, usuario_id, contrasena) VALUES (?, ?, ?)')
+    .run(nombre, usuario_id || null, contrasena || null);
   res.status(201).json(db.prepare(`${SELECT_CUENTA} WHERE c.id = ?`).get(lastInsertRowid));
 });
 
@@ -62,12 +63,17 @@ router.put('/:id', auth, requireRole('admin'), (req, res) => {
   const actual = db.prepare('SELECT * FROM cuentas_nvr WHERE id = ?').get(req.params.id);
   if (!actual) return res.status(404).json({ error: 'Cuenta no encontrada' });
 
-  const { nombre, usuario_id } = req.body;
+  const { nombre, usuario_id, contrasena } = req.body;
   if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
 
   try {
-    db.prepare('UPDATE cuentas_nvr SET nombre = ?, usuario_id = ? WHERE id = ?')
-      .run(nombre, usuario_id === undefined ? actual.usuario_id : (usuario_id || null), req.params.id);
+    db.prepare('UPDATE cuentas_nvr SET nombre = ?, usuario_id = ?, contrasena = ? WHERE id = ?')
+      .run(
+        nombre,
+        usuario_id === undefined ? actual.usuario_id : (usuario_id || null),
+        contrasena === undefined ? actual.contrasena : (contrasena || null),
+        req.params.id
+      );
   } catch (err) {
     if (/UNIQUE constraint failed/.test(err.message)) {
       return res.status(409).json({ error: 'Ya existe una cuenta NVR con ese nombre' });

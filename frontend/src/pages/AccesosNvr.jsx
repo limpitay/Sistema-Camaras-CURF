@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import Layout from '../components/Layout';
+import NavModal from '../components/NavModal';
 import { useAuth } from '../context/AuthContext';
 
 // Cuentas configuradas directamente en el NVR/HikCentral (vigilancia,
@@ -11,37 +13,6 @@ import { useAuth } from '../context/AuthContext';
 // (Sistemas-lectura ve todo en modo lectura, igual que el resto del panel).
 const ESTADO_LABEL = { activa: 'Activa', inactiva: 'Inactiva' };
 const ESTADO_BADGE = { activa: 'text-bg-success', inactiva: 'text-bg-secondary' };
-
-// Flechas fijas a los costados de la pantalla para hojear el detalle sin
-// cerrar el modal — se ocultan solas en el extremo de la lista.
-function NavModal({ onAnterior, onSiguiente }) {
-  return (
-    <>
-      {onAnterior && (
-        <button
-          type="button"
-          className="btn btn-light rounded-circle shadow"
-          aria-label="Anterior"
-          style={{ position: 'fixed', left: 20, top: '50%', transform: 'translateY(-50%)', zIndex: 1060, width: 44, height: 44 }}
-          onClick={onAnterior}
-        >
-          ‹
-        </button>
-      )}
-      {onSiguiente && (
-        <button
-          type="button"
-          className="btn btn-light rounded-circle shadow"
-          aria-label="Siguiente"
-          style={{ position: 'fixed', right: 20, top: '50%', transform: 'translateY(-50%)', zIndex: 1060, width: 44, height: 44 }}
-          onClick={onSiguiente}
-        >
-          ›
-        </button>
-      )}
-    </>
-  );
-}
 
 function CamaraThumb({ camara, grande }) {
   return (
@@ -62,6 +33,147 @@ function CamaraThumb({ camara, grande }) {
   );
 }
 
+const NUEVA_CUENTA = '__nueva__';
+
+// Formulario suelto para dar de alta un acceso desde Pendientes HikCentral:
+// la cámara ya viene elegida, acá solo se elige a qué cuenta NVR agregarla —
+// al elegirla se muestra su login/contraseña de HikCentral para tenerlos a
+// mano y aplicar el acceso en el equipo real. Si la cuenta todavía no existe
+// (ej. "dvega" para un usuario nuevo), se puede crear ahí mismo sin salir del
+// flujo — se crea primero, y con esa misma cámara ya queda cargada.
+function ModalAccesoRapido({ modalRapido, setModalRapido, cuentas, usuarios, error, guardando, onSubmit }) {
+  const cuentaElegida = cuentas.find((c) => String(c.id) === String(modalRapido.cuenta_id));
+  const creandoCuenta = modalRapido.cuenta_id === NUEVA_CUENTA;
+  return (
+    <>
+      <div className="modal d-block" tabIndex="-1" role="dialog" onClick={(e) => { if (e.target === e.currentTarget) setModalRapido(null); }}>
+        <div className="modal-dialog modal-dialog-centered" role="document">
+          <form className="modal-content" onSubmit={onSubmit}>
+            <div className="modal-header">
+              <h2 className="modal-title h5">
+                Agregar acceso — {modalRapido.camaras.length === 1
+                  ? (modalRapido.camaras[0].descripcion || modalRapido.camaras[0].hostname)
+                  : `${modalRapido.camaras.length} cámaras`}
+              </h2>
+              <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setModalRapido(null)} />
+            </div>
+            <div className="modal-body">
+              <div className="mb-3" style={{ maxHeight: 180, overflowY: 'auto' }}>
+                {modalRapido.camaras.map((cam) => (
+                  <div key={cam.id} className="border-bottom pb-2 mb-2">
+                    <div className="fw-semibold">{cam.hostname}</div>
+                    {cam.descripcion && <div className="text-body-secondary small">{cam.descripcion}</div>}
+                    <div className="text-body-secondary small">{cam.piso} · {cam.edificio} · {cam.area}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label">Cuenta NVR</label>
+                <select
+                  className="form-select"
+                  value={modalRapido.cuenta_id}
+                  onChange={(e) => setModalRapido((m) => ({ ...m, cuenta_id: e.target.value }))}
+                  required
+                  autoFocus
+                >
+                  <option value="" disabled>Elegí una cuenta...</option>
+                  <option value={NUEVA_CUENTA}>+ Crear cuenta nueva...</option>
+                  {cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              </div>
+
+              {cuentaElegida && (
+                <div className="alert alert-secondary small py-2">
+                  Login de HikCentral: <strong>{cuentaElegida.nombre}</strong>
+                  {cuentaElegida.contrasena
+                    ? <> / <strong>{cuentaElegida.contrasena}</strong></>
+                    : <span className="text-body-secondary"> (sin contraseña cargada — editá la cuenta para agregarla)</span>}
+                </div>
+              )}
+
+              {creandoCuenta && (
+                <div className="border rounded p-3 mb-3">
+                  <div className="mb-3">
+                    <label className="form-label">Nombre / login de la cuenta nueva</label>
+                    <input
+                      className="form-control"
+                      placeholder="Ej: dvega"
+                      value={modalRapido.cuentaNombre}
+                      onChange={(e) => setModalRapido((m) => ({ ...m, cuentaNombre: e.target.value }))}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label">Usuario del sistema vinculado (opcional)</label>
+                    <select
+                      className="form-select"
+                      value={modalRapido.cuentaUsuarioId}
+                      onChange={(e) => setModalRapido((m) => ({ ...m, cuentaUsuarioId: e.target.value }))}
+                    >
+                      <option value="">Sin vincular</option>
+                      {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre} ({u.email_institucional})</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">Contraseña de HikCentral (opcional)</label>
+                    <input
+                      className="form-control"
+                      placeholder="Contraseña de este login en HikCentral"
+                      value={modalRapido.cuentaContrasena}
+                      onChange={(e) => setModalRapido((m) => ({ ...m, cuentaContrasena: e.target.value }))}
+                      autoComplete="off"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="mb-3">
+                <label className="form-label">Grupo (opcional)</label>
+                <input
+                  className="form-control"
+                  placeholder="Ej: Grupo 1 - UTI/UCO"
+                  value={modalRapido.grupo}
+                  onChange={(e) => setModalRapido((m) => ({ ...m, grupo: e.target.value }))}
+                />
+              </div>
+              <div className="d-flex gap-4">
+                <div className="form-check">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id="chk-rapido-en-vivo"
+                    checked={modalRapido.en_vivo}
+                    onChange={(e) => setModalRapido((m) => ({ ...m, en_vivo: e.target.checked }))}
+                  />
+                  <label className="form-check-label" htmlFor="chk-rapido-en-vivo">En vivo</label>
+                </div>
+                <div className="form-check">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id="chk-rapido-reproduccion"
+                    checked={modalRapido.reproduccion}
+                    onChange={(e) => setModalRapido((m) => ({ ...m, reproduccion: e.target.checked }))}
+                  />
+                  <label className="form-check-label" htmlFor="chk-rapido-reproduccion">Reproducción</label>
+                </div>
+              </div>
+              {error && <div className="alert alert-danger small py-2 mt-3 mb-0">{error}</div>}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-outline-secondary" onClick={() => setModalRapido(null)}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar acceso'}</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div className="modal-backdrop show" />
+    </>
+  );
+}
+
 export default function AccesosNvr() {
   const { user } = useAuth();
   const esAdmin = user?.rol === 'admin';
@@ -73,14 +185,33 @@ export default function AccesosNvr() {
   const [cuentaId, setCuentaId] = useState(null);
   const [detalle, setDetalle] = useState(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
-  const [vista, setVista] = useState('tabla');
+  const [vista, setVista] = useState('cuadricula');
   const [camaraDetalle, setCamaraDetalle] = useState(null);
 
   const [modalCuenta, setModalCuenta] = useState(null);
   const [modalAcceso, setModalAcceso] = useState(null);
+  const [modalRapido, setModalRapido] = useState(null);
   const [busquedaCamaraModal, setBusquedaCamaraModal] = useState('');
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
+
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Llegada desde Pendientes HikCentral (botón "Agregar en Accesos NVR"): las
+  // cámaras tildadas viajan en el state de la navegación, no por query
+  // string, para no dejarlas pegadas en la URL. Se limpia el state al toque
+  // (navigate replace) para que un F5 no vuelva a abrir el modal solo.
+  useEffect(() => {
+    if (location.state?.camarasParaAcceso?.length) {
+      setModalRapido({
+        camaras: location.state.camarasParaAcceso, cuenta_id: '', grupo: '', en_vivo: true, reproduccion: true,
+        cuentaNombre: '', cuentaUsuarioId: '', cuentaContrasena: '',
+      });
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   const cargarCuentas = () => client.get('/cuentas-nvr').then((res) => setCuentas(res.data));
   const cargarDetalle = () => {
@@ -112,15 +243,15 @@ export default function AccesosNvr() {
   };
 
   // --- Cuentas: alta / edición / baja ---
-  const abrirNuevaCuenta = () => { setError(''); setModalCuenta({ id: null, nombre: '', usuario_id: '' }); };
-  const abrirEditarCuenta = (c) => { setError(''); setModalCuenta({ id: c.id, nombre: c.nombre, usuario_id: c.usuario_id || '' }); };
+  const abrirNuevaCuenta = () => { setError(''); setModalCuenta({ id: null, nombre: '', usuario_id: '', contrasena: '' }); };
+  const abrirEditarCuenta = (c) => { setError(''); setModalCuenta({ id: c.id, nombre: c.nombre, usuario_id: c.usuario_id || '', contrasena: c.contrasena || '' }); };
 
   const guardarCuenta = async (e) => {
     e.preventDefault();
     setError('');
     setGuardando(true);
     try {
-      const datos = { nombre: modalCuenta.nombre.trim(), usuario_id: modalCuenta.usuario_id || null };
+      const datos = { nombre: modalCuenta.nombre.trim(), usuario_id: modalCuenta.usuario_id || null, contrasena: modalCuenta.contrasena.trim() || null };
       if (modalCuenta.id) await client.put(`/cuentas-nvr/${modalCuenta.id}`, datos);
       else await client.post('/cuentas-nvr', datos);
       setModalCuenta(null);
@@ -171,6 +302,51 @@ export default function AccesosNvr() {
       setModalAcceso(null);
       await cargarDetalle();
       await cargarCuentas();
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo guardar el acceso');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  // Alta rápida desde Pendientes HikCentral: la cámara ya viene elegida, acá
+  // solo falta decidir a qué cuenta NVR se le da el acceso.
+  const guardarAccesoRapido = async (e) => {
+    e.preventDefault();
+    if (!modalRapido.cuenta_id) { setError('Elegí una cuenta.'); return; }
+    if (modalRapido.cuenta_id === NUEVA_CUENTA && !modalRapido.cuentaNombre.trim()) {
+      setError('Poné un nombre para la cuenta nueva.');
+      return;
+    }
+    setError('');
+    setGuardando(true);
+    try {
+      let cuentaIdUsada = modalRapido.cuenta_id;
+      if (cuentaIdUsada === NUEVA_CUENTA) {
+        const { data: cuentaNueva } = await client.post('/cuentas-nvr', {
+          nombre: modalRapido.cuentaNombre.trim(),
+          usuario_id: modalRapido.cuentaUsuarioId || null,
+          contrasena: modalRapido.cuentaContrasena.trim() || null,
+        });
+        cuentaIdUsada = cuentaNueva.id;
+      }
+
+      // Secuencial (no Promise.all) para no pisar la fila de accesos_nvr si
+      // dos cámaras de la tanda generaran algún conflicto raro — son pocas
+      // por tanda, la diferencia de tiempo no se nota.
+      for (const cam of modalRapido.camaras) {
+        await client.post(`/cuentas-nvr/${cuentaIdUsada}/accesos`, {
+          camara_id: cam.id,
+          grupo: modalRapido.grupo.trim() || undefined,
+          en_vivo: modalRapido.en_vivo,
+          reproduccion: modalRapido.reproduccion,
+        });
+      }
+      setModalRapido(null);
+      await cargarCuentas();
+      // Entra directo al detalle de la cuenta usada — ahí ya se ve la
+      // cámara recién agregada, sin tener que buscarla de nuevo.
+      setCuentaId(cuentaIdUsada);
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo guardar el acceso');
     } finally {
@@ -306,8 +482,9 @@ export default function AccesosNvr() {
                       <CamaraThumb camara={c} />
                     </div>
                     <div className="card-body">
-                      <div className="small text-body-secondary mb-1">{c.edificio} · {c.piso} · {c.area}</div>
-                      <div className="small mb-1">{c.descripcion || c.hostname}</div>
+                      <div className="fw-semibold mb-1">{c.hostname}</div>
+                      {c.descripcion && <div className="small mb-1">{c.descripcion}</div>}
+                      <div className="small text-body-secondary mb-1">{c.piso} · {c.edificio} · {c.area}</div>
                       {c.ip && <div className="small text-body-secondary mb-2">{c.ip}</div>}
                       <div className="d-flex gap-1 flex-wrap">
                         <span className={`badge ${c.en_vivo ? 'text-bg-success' : 'text-bg-secondary'}`}>En vivo{c.en_vivo ? '' : ' no'}</span>
@@ -503,6 +680,17 @@ export default function AccesosNvr() {
                         {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre} ({u.email_institucional})</option>)}
                       </select>
                     </div>
+                    <div className="mb-3">
+                      <label className="form-label">Contraseña de HikCentral (opcional)</label>
+                      <input
+                        className="form-control"
+                        placeholder="Contraseña de este login en HikCentral"
+                        value={modalCuenta.contrasena}
+                        onChange={(e) => setModalCuenta((m) => ({ ...m, contrasena: e.target.value }))}
+                        autoComplete="off"
+                      />
+                      <div className="form-text">Sirve para tenerla a mano al aplicar accesos pendientes — no es la contraseña de este panel.</div>
+                    </div>
                     {error && <div className="alert alert-danger small py-2 mb-0">{error}</div>}
                   </div>
                   <div className="modal-footer">
@@ -515,6 +703,8 @@ export default function AccesosNvr() {
             <div className="modal-backdrop show" />
           </>
         )}
+
+        {modalRapido && <ModalAccesoRapido modalRapido={modalRapido} setModalRapido={setModalRapido} cuentas={cuentas} usuarios={usuarios} error={error} guardando={guardando} onSubmit={guardarAccesoRapido} />}
       </Layout>
     );
   }
@@ -606,6 +796,17 @@ export default function AccesosNvr() {
                       {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre} ({u.email_institucional})</option>)}
                     </select>
                   </div>
+                  <div className="mb-3">
+                    <label className="form-label">Contraseña de HikCentral (opcional)</label>
+                    <input
+                      className="form-control"
+                      placeholder="Contraseña de este login en HikCentral"
+                      value={modalCuenta.contrasena}
+                      onChange={(e) => setModalCuenta((m) => ({ ...m, contrasena: e.target.value }))}
+                      autoComplete="off"
+                    />
+                    <div className="form-text">Sirve para tenerla a mano al aplicar accesos pendientes — no es la contraseña de este panel.</div>
+                  </div>
                   {error && <div className="alert alert-danger small py-2 mb-0">{error}</div>}
                 </div>
                 <div className="modal-footer">
@@ -618,6 +819,8 @@ export default function AccesosNvr() {
           <div className="modal-backdrop show" />
         </>
       )}
+
+      {modalRapido && <ModalAccesoRapido modalRapido={modalRapido} setModalRapido={setModalRapido} cuentas={cuentas} usuarios={usuarios} error={error} guardando={guardando} onSubmit={guardarAccesoRapido} />}
     </Layout>
   );
 }

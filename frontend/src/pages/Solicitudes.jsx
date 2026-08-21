@@ -88,11 +88,13 @@ export default function Solicitudes() {
 
             <ul className="list-unstyled small my-2">
               {s.camaras.map((c) => (
-                <li key={c.id}>
-                  <button type="button" className="btn btn-link p-0 text-start align-baseline" onClick={() => setDetalleCamara(c)}>
-                    <strong>{c.descripcion || c.hostname}</strong>
+                <li key={c.id} className="mb-2">
+                  <button type="button" className="btn btn-link p-0 text-start d-block" onClick={() => setDetalleCamara(c)}>
+                    <strong>{c.hostname}</strong>
                   </button>
-                  {' '}— {c.edificio} · {c.piso} · {c.area}
+                  {c.descripcion && <div className="text-body-secondary">{c.descripcion}</div>}
+                  <div className="text-body-secondary">{c.piso} · {c.edificio}</div>
+                  <div className="text-body-secondary">{c.area}</div>
                 </li>
               ))}
             </ul>

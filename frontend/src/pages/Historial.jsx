@@ -33,17 +33,18 @@ export default function Historial() {
           <table className="table table-hover align-middle mb-0">
             <thead className="table-light">
               <tr>
-                <th>Usuario</th><th>Email</th><th>Cámara</th><th>Ubicación</th>
+                <th>Email</th><th>Hostname</th><th>Descripción</th><th>Piso</th><th>Edificio</th>
                 <th>Otorgado</th><th>Activo</th><th>Aplicado en HikCentral</th><th>Revocado</th>
               </tr>
             </thead>
             <tbody>
               {items.map((it) => (
                 <tr key={it.id}>
-                  <td>{it.usuario_nombre}</td>
                   <td>{it.email_institucional}</td>
-                  <td>{it.descripcion || it.hostname}</td>
-                  <td>{it.edificio} · {it.piso} · {it.area}</td>
+                  <td>{it.hostname}</td>
+                  <td>{it.descripcion}</td>
+                  <td>{it.piso}</td>
+                  <td>{it.edificio}</td>
                   <td>{new Date(it.fecha_otorgado).toLocaleString()}</td>
                   <td>
                     <span className={`badge ${it.activo ? 'bg-success' : 'bg-body-secondary text-body'}`}>

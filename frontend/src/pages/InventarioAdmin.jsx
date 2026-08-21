@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import client from '../api/client';
 import Layout from '../components/Layout';
 import UbicacionSelector from '../components/UbicacionSelector';
+import NavModal from '../components/NavModal';
 
 const ESTADO_LABEL = { activa: 'Activa', inactiva: 'Inactiva' };
 const ESTADO_BADGE = { activa: 'text-bg-success', inactiva: 'text-bg-secondary' };
@@ -27,6 +28,12 @@ export default function InventarioAdmin() {
   };
 
   useEffect(cargar, [filtroUbicacion, filtroEstado]);
+
+  const indiceDetalle = detalle ? camaras.findIndex((c) => c.id === detalle.id) : -1;
+  const moverDetalle = (delta) => {
+    const nuevo = camaras[indiceDetalle + delta];
+    if (nuevo) setDetalle(nuevo);
+  };
 
   return (
     <Layout>
@@ -74,8 +81,9 @@ export default function InventarioAdmin() {
                 </span>
               </div>
               <div className="card-body">
-                <div className="small text-body-secondary mb-1">{c.edificio} · {c.piso} · {c.area}</div>
-                {c.ubicacion && <div className="small mb-1">{c.ubicacion}</div>}
+                {c.descripcion && <div className="fw-semibold mb-1">{c.descripcion}</div>}
+                <div className="small text-body-secondary mb-1">{c.piso} · {c.edificio}</div>
+                <div className="small text-body-secondary mb-1">{c.area}</div>
                 {c.observaciones && (
                   <p className="small fst-italic border-start border-2 ps-2 text-body-secondary mb-0">{c.observaciones}</p>
                 )}
@@ -87,13 +95,17 @@ export default function InventarioAdmin() {
 
       {detalle && (
         <>
+          <NavModal
+            onAnterior={indiceDetalle > 0 ? () => moverDetalle(-1) : null}
+            onSiguiente={indiceDetalle < camaras.length - 1 ? () => moverDetalle(1) : null}
+          />
           <div
             className="modal d-block"
             tabIndex="-1"
             role="dialog"
             onClick={(e) => { if (e.target === e.currentTarget) setDetalle(null); }}
           >
-            <div className="modal-dialog modal-dialog-centered" role="document">
+            <div className="modal-dialog modal-dialog-centered" role="document" style={{ maxWidth: 750 }}>
               <div className="modal-content">
                 <div className="modal-header">
                   <h2 className="modal-title h5">{detalle.hostname}</h2>
