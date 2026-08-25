@@ -11,7 +11,7 @@ const ETIQUETAS = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Re
 // Admin y Sistemas-lectura solo consultan (mismo panel, sin botones de resolución).
 export default function Solicitudes() {
   const { user } = useAuth();
-  const puedeResolver = user?.rol === 'direccion';
+  const puedeResolver = ['direccion', 'admin', 'avanzado'].includes(user?.rol);
 
   const [solicitudes, setSolicitudes] = useState([]);
   const [filtroEstado, setFiltroEstado] = useState('pendiente');

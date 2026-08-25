@@ -22,7 +22,7 @@ function boolificar(row) {
 
 // GET /api/accesos — RF-17/RF-18/RF-19: vigentes o historial, por usuario o
 // por cámara. Sin filtros trae todo (incluye revocados) para el historial completo.
-router.get('/', auth, requireRole('direccion', 'admin', 'sistemas_lectura'), (req, res) => {
+router.get('/', auth, requireRole('direccion', 'admin', 'avanzado', 'sistemas_lectura'), (req, res) => {
   const { usuario_id, camara_id, activo } = req.query;
   const condiciones = [];
   const valores = [];
@@ -39,7 +39,7 @@ router.get('/', auth, requireRole('direccion', 'admin', 'sistemas_lectura'), (re
 
 // GET /api/accesos/pendientes-hikcentral — RF-16/RF-20/RF-21 (Admin, Sistemas-lectura)
 // Cubre ambos sentidos: altas aprobadas sin aplicar, y bajas revocadas sin remover.
-router.get('/pendientes-hikcentral', auth, requireRole('admin', 'sistemas_lectura'), (req, res) => {
+router.get('/pendientes-hikcentral', auth, requireRole('admin', 'avanzado', 'sistemas_lectura'), (req, res) => {
   const filas = db.prepare(
     `${SELECT_BASE}
      WHERE (ao.activo = 1 AND ao.aplicado_en_hikcentral = 0)
@@ -62,7 +62,7 @@ router.patch('/:id/revocar', auth, requireRole('direccion'), (req, res) => {
 
 // PATCH /api/accesos/:id/aplicar — RF-15/RF-22 (Admin): confirma que ya dio
 // de alta el permiso real en HikCentral.
-router.patch('/:id/aplicar', auth, requireRole('admin'), (req, res) => {
+router.patch('/:id/aplicar', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const resultado = db.prepare(
     `UPDATE accesos_otorgados SET aplicado_en_hikcentral = 1, fecha_aplicado = datetime('now'), aplicado_por = ?
      WHERE id = ? AND activo = 1 AND aplicado_en_hikcentral = 0`
@@ -76,7 +76,7 @@ router.patch('/:id/aplicar', auth, requireRole('admin'), (req, res) => {
 // removió el permiso de HikCentral tras una revocación. El registro vuelve al
 // estado activo=0/aplicado=0 ("nada pendiente" — ver tabla de estados en
 // ESPECIFICACION.md 4.5).
-router.patch('/:id/confirmar-baja', auth, requireRole('admin'), (req, res) => {
+router.patch('/:id/confirmar-baja', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const resultado = db.prepare(
     `UPDATE accesos_otorgados SET aplicado_en_hikcentral = 0, aplicado_por = ?
      WHERE id = ? AND activo = 0 AND aplicado_en_hikcentral = 1`

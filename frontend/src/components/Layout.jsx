@@ -1,31 +1,40 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-// Accesos NVR, Solicitudes, Pendientes HikCentral e Historial de accesos
-// están ocultos de la navegación a propósito por ahora (para todos los
-// roles) — las rutas siguen funcionando si alguien entra por URL directa,
-// solo no aparecen como link. Para reactivarlos, descomentar las líneas de
-// abajo.
+// Solicitudes, Pendientes HikCentral e Historial de accesos siguen ocultos
+// de la navegación a propósito (para todos los roles) — las rutas siguen
+// funcionando si alguien entra por URL directa, solo no aparecen como link.
+// Para reactivarlos, descomentar las líneas de abajo. Accesos NVR se
+// reactivó a pedido explícito.
 const LINKS_POR_ROL = {
   mando_medio: [
     { to: '/camaras', label: 'Cámaras disponibles' },
     { to: '/mis-solicitudes', label: 'Mis solicitudes' },
   ],
   direccion: [
+    { to: '/accesos-nvr', label: 'Accesos NVR' },
     // { to: '/solicitudes', label: 'Solicitudes' },
     // { to: '/historial', label: 'Historial de accesos' },
   ],
   admin: [
     { to: '/inventario', label: 'Camaras' },
     { to: '/crud', label: 'CRUD' },
-    // { to: '/accesos-nvr', label: 'Accesos NVR' },
+    { to: '/accesos-nvr', label: 'Accesos NVR' },
+    // { to: '/solicitudes', label: 'Solicitudes' },
+    // { to: '/pendientes-hikcentral', label: 'Pendientes HikCentral' },
+    // { to: '/historial', label: 'Historial de accesos' },
+  ],
+  avanzado: [
+    { to: '/inventario', label: 'Camaras' },
+    { to: '/crud', label: 'CRUD' },
+    { to: '/accesos-nvr', label: 'Accesos NVR' },
     // { to: '/solicitudes', label: 'Solicitudes' },
     // { to: '/pendientes-hikcentral', label: 'Pendientes HikCentral' },
     // { to: '/historial', label: 'Historial de accesos' },
   ],
   sistemas_lectura: [
     { to: '/inventario', label: 'Camaras' },
-    // { to: '/accesos-nvr', label: 'Accesos NVR' },
+    { to: '/accesos-nvr', label: 'Accesos NVR' },
     // { to: '/solicitudes', label: 'Solicitudes' },
     // { to: '/pendientes-hikcentral', label: 'Pendientes HikCentral' },
     // { to: '/historial', label: 'Historial de accesos' },

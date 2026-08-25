@@ -103,7 +103,7 @@ router.get('/mias', auth, requireRole('mando_medio'), (req, res) => {
 
 // GET /api/solicitudes — RF-13/RF-19 (Dirección, Admin, Sistemas-lectura):
 // ?estado=pendiente filtra; sin filtro trae todo (historial completo).
-router.get('/', auth, requireRole('direccion', 'admin', 'sistemas_lectura'), (req, res) => {
+router.get('/', auth, requireRole('direccion', 'admin', 'avanzado', 'sistemas_lectura'), (req, res) => {
   const { estado } = req.query;
   const base = `SELECT s.*, u.nombre AS solicitante_nombre, u.email_institucional AS solicitante_email
                 FROM solicitudes s JOIN usuarios u ON u.id = s.usuario_id`;
@@ -149,11 +149,11 @@ function resolverSolicitud(solicitudId, estado, resueltoPor) {
   return { ok: true, solicitud: conCamaras(solicitud, true), accesos };
 }
 
-// PATCH /api/solicitudes/:id — RF-13/RF-14 (Dirección): aprueba o rechaza la
-// solicitud completa. Si se aprueba, nace ya mismo un acceso_otorgado por
-// cada cámara incluida, con aplicado_en_hikcentral=0 (queda pendiente de que
-// Sistemas lo cargue en HikCentral — ver 4.5).
-router.patch('/:id', auth, requireRole('direccion'), (req, res) => {
+// PATCH /api/solicitudes/:id — RF-13/RF-14 (Dirección, Admin, Avanzado):
+// aprueba o rechaza la solicitud completa. Si se aprueba, nace ya mismo un
+// acceso_otorgado por cada cámara incluida, con aplicado_en_hikcentral=0
+// (queda pendiente de que Sistemas lo cargue en HikCentral — ver 4.5).
+router.patch('/:id', auth, requireRole('direccion', 'admin', 'avanzado'), (req, res) => {
   const { estado } = req.body;
   if (!['aprobada', 'rechazada'].includes(estado)) {
     return res.status(400).json({ error: 'estado debe ser aprobada o rechazada' });
@@ -173,7 +173,7 @@ router.patch('/:id', auth, requireRole('direccion'), (req, res) => {
 
 // POST /api/solicitudes/resolver-lote — RF-13 ("en lote"): resuelve varias
 // solicitudes de una sola vez con el mismo estado.
-router.post('/resolver-lote', auth, requireRole('direccion'), (req, res) => {
+router.post('/resolver-lote', auth, requireRole('direccion', 'admin', 'avanzado'), (req, res) => {
   const { solicitud_ids, estado } = req.body;
 
   if (!Array.isArray(solicitud_ids) || solicitud_ids.length === 0) {

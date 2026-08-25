@@ -17,12 +17,12 @@ const SELECT_CUENTA = `
 `;
 
 // GET /api/cuentas-nvr
-router.get('/', auth, requireRole('admin', 'sistemas_lectura'), (req, res) => {
+router.get('/', auth, requireRole('admin', 'avanzado', 'sistemas_lectura'), (req, res) => {
   res.json(db.prepare(`${SELECT_CUENTA} ORDER BY c.nombre`).all());
 });
 
 // GET /api/cuentas-nvr/:id — incluye el detalle de cámaras con permisos
-router.get('/:id', auth, requireRole('admin', 'sistemas_lectura'), (req, res) => {
+router.get('/:id', auth, requireRole('admin', 'avanzado', 'sistemas_lectura'), (req, res) => {
   const cuenta = db.prepare(`${SELECT_CUENTA} WHERE c.id = ?`).get(req.params.id);
   if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' });
 
@@ -45,8 +45,8 @@ router.get('/:id', auth, requireRole('admin', 'sistemas_lectura'), (req, res) =>
   });
 });
 
-// POST /api/cuentas-nvr — Admin
-router.post('/', auth, requireRole('admin'), (req, res) => {
+// POST /api/cuentas-nvr — Admin/Avanzado
+router.post('/', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { nombre, usuario_id, contrasena } = req.body;
   if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
 
@@ -58,8 +58,8 @@ router.post('/', auth, requireRole('admin'), (req, res) => {
   res.status(201).json(db.prepare(`${SELECT_CUENTA} WHERE c.id = ?`).get(lastInsertRowid));
 });
 
-// PUT /api/cuentas-nvr/:id — Admin
-router.put('/:id', auth, requireRole('admin'), (req, res) => {
+// PUT /api/cuentas-nvr/:id — Admin/Avanzado
+router.put('/:id', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const actual = db.prepare('SELECT * FROM cuentas_nvr WHERE id = ?').get(req.params.id);
   if (!actual) return res.status(404).json({ error: 'Cuenta no encontrada' });
 
@@ -97,7 +97,7 @@ router.delete('/:id', auth, requireRole('admin'), (req, res) => {
 // (es el borrador propio del sistema, todavía sin aplicar en el NVR/HikCentral
 // real); si ya existía, esta llamada solo actualiza grupo/en_vivo/reproduccion
 // y NO toca el estado pendiente/concedido.
-router.post('/:id/accesos', auth, requireRole('admin'), (req, res) => {
+router.post('/:id/accesos', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const cuenta = db.prepare('SELECT id FROM cuentas_nvr WHERE id = ?').get(req.params.id);
   if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' });
 
@@ -118,7 +118,7 @@ router.post('/:id/accesos', auth, requireRole('admin'), (req, res) => {
 // PATCH /api/cuentas-nvr/:id/accesos/:accesoId — Admin. Togglea en_vivo/reproduccion
 // y/o el estado pendiente/concedido (esto último es lo que se tilda a mano
 // después de aplicar el permiso en el NVR/HikCentral real).
-router.patch('/:id/accesos/:accesoId', auth, requireRole('admin'), (req, res) => {
+router.patch('/:id/accesos/:accesoId', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const acceso = db.prepare('SELECT * FROM accesos_nvr WHERE id = ? AND cuenta_id = ?').get(req.params.accesoId, req.params.id);
   if (!acceso) return res.status(404).json({ error: 'Acceso no encontrado' });
 

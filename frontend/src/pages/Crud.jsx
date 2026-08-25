@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import UbicacionSelector from '../components/UbicacionSelector';
 import NavModal from '../components/NavModal';
 import { AREAS_SUGERIDAS } from '../constants/areasSugeridas';
+import { useAuth } from '../context/AuthContext';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -123,6 +124,11 @@ function tieneCamaraCoincidente(camaras, campoPropio, filtro) {
 }
 
 export default function Crud() {
+  const { user } = useAuth();
+  // El rol "avanzado" tiene el mismo acceso que admin salvo borrado físico
+  // (edificios/pisos/áreas/NVR) — esos son los únicos DELETE reales del
+  // sistema, así que los botones de Borrar quedan exclusivos de admin.
+  const puedeBorrar = user?.rol === 'admin';
   const [tab, setTab] = useState('camaras');
 
   const [camaras, setCamaras] = useState([]);
@@ -276,7 +282,7 @@ export default function Crud() {
   };
 
   const camarasFiltradas = camaras.filter((c) => {
-    if (!coincideBusqueda(c, busquedaCamaras, ['hostname', 'ip', 'mac_address', 'area'])) return false;
+    if (!coincideBusqueda(c, busquedaCamaras, ['hostname', 'ip', 'mac_address', 'area', 'descripcion'])) return false;
     if (filtroCam.edificioId && c.edificio_id !== filtroCam.edificioId) return false;
     if (filtroCam.pisoId && c.piso_id !== filtroCam.pisoId) return false;
     if (filtroCam.areaId && c.area_id !== filtroCam.areaId) return false;
@@ -541,7 +547,7 @@ export default function Crud() {
           <FiltrosCrud
             busqueda={busquedaCamaras}
             onBusqueda={setBusquedaCamaras}
-            placeholderBusqueda="IP, MAC, Hostname o Área..."
+            placeholderBusqueda="IP, MAC, Hostname, Área o Descripción..."
             filtro={filtroCam}
             onFiltro={setFiltroCam}
             nvrs={nvrs}
@@ -669,7 +675,7 @@ export default function Crud() {
                     <td><span className="badge text-bg-secondary">{n.cantidad_camaras}</span></td>
                     <td className="text-end">
                       <button className="btn btn-sm btn-outline-secondary me-2" onClick={() => abrirModalNvr(n)}>Editar</button>
-                      <button className="btn btn-sm btn-outline-danger" onClick={() => borrar('nvr', n.id)}>Borrar</button>
+                      {puedeBorrar && <button className="btn btn-sm btn-outline-danger" onClick={() => borrar('nvr', n.id)}>Borrar</button>}
                     </td>
                   </tr>
                 ))}
@@ -711,7 +717,7 @@ export default function Crud() {
                     <td><span className="badge text-bg-secondary">{ed.cantidad_nvrs}</span></td>
                     <td className="text-end">
                       <button className="btn btn-sm btn-outline-secondary me-2" onClick={() => abrirModalEdificio(ed)}>Editar</button>
-                      <button className="btn btn-sm btn-outline-danger" onClick={() => borrar('edificio', ed.id)}>Borrar</button>
+                      {puedeBorrar && <button className="btn btn-sm btn-outline-danger" onClick={() => borrar('edificio', ed.id)}>Borrar</button>}
                     </td>
                   </tr>
                 ))}
@@ -753,7 +759,7 @@ export default function Crud() {
                     <td><span className="badge text-bg-secondary">{p.cantidad_nvrs}</span></td>
                     <td className="text-end">
                       <button className="btn btn-sm btn-outline-secondary me-2" onClick={() => abrirModalPiso(p)}>Editar</button>
-                      <button className="btn btn-sm btn-outline-danger" onClick={() => borrar('piso', p.id)}>Borrar</button>
+                      {puedeBorrar && <button className="btn btn-sm btn-outline-danger" onClick={() => borrar('piso', p.id)}>Borrar</button>}
                     </td>
                   </tr>
                 ))}
@@ -790,7 +796,7 @@ export default function Crud() {
                     <td><span className="badge text-bg-secondary">{a.cantidad_camaras}</span></td>
                     <td className="text-end">
                       <button className="btn btn-sm btn-outline-secondary me-2" onClick={() => abrirModalArea(a)}>Editar</button>
-                      <button className="btn btn-sm btn-outline-danger" onClick={() => borrar('area', a.id)}>Borrar</button>
+                      {puedeBorrar && <button className="btn btn-sm btn-outline-danger" onClick={() => borrar('area', a.id)}>Borrar</button>}
                     </td>
                   </tr>
                 ))}

@@ -41,27 +41,27 @@ export default function App() {
           } />
 
           <Route path="/inventario" element={
-            <PrivateRoute roles={['admin', 'sistemas_lectura']}><InventarioAdmin /></PrivateRoute>
+            <PrivateRoute roles={['admin', 'avanzado', 'sistemas_lectura']}><InventarioAdmin /></PrivateRoute>
           } />
 
           <Route path="/crud" element={
-            <PrivateRoute roles={['admin']}><Crud /></PrivateRoute>
+            <PrivateRoute roles={['admin', 'avanzado']}><Crud /></PrivateRoute>
           } />
 
           <Route path="/solicitudes" element={
-            <PrivateRoute roles={['direccion', 'admin', 'sistemas_lectura']}><Solicitudes /></PrivateRoute>
+            <PrivateRoute roles={['direccion', 'admin', 'avanzado', 'sistemas_lectura']}><Solicitudes /></PrivateRoute>
           } />
 
           <Route path="/accesos-nvr" element={
-            <PrivateRoute roles={['admin', 'sistemas_lectura']}><AccesosNvr /></PrivateRoute>
+            <PrivateRoute roles={['admin', 'avanzado', 'sistemas_lectura']}><AccesosNvr /></PrivateRoute>
           } />
 
           <Route path="/pendientes-hikcentral" element={
-            <PrivateRoute roles={['admin', 'sistemas_lectura']}><PendientesHikCentral /></PrivateRoute>
+            <PrivateRoute roles={['admin', 'avanzado', 'sistemas_lectura']}><PendientesHikCentral /></PrivateRoute>
           } />
 
           <Route path="/historial" element={
-            <PrivateRoute roles={['direccion', 'admin', 'sistemas_lectura']}><Historial /></PrivateRoute>
+            <PrivateRoute roles={['direccion', 'admin', 'avanzado', 'sistemas_lectura']}><Historial /></PrivateRoute>
           } />
 
           <Route path="*" element={<Navigate to="/" />} />

@@ -84,7 +84,7 @@ function obtenerAccesoSet(usuarioId) {
 // POST /api/camaras — RF-04 (Admin). Acepta JSON normal o multipart/form-data
 // con un archivo "imagen" (jpg/png, RF-06) — si viene el archivo, pisa
 // cualquier imagen_url que se haya mandado también.
-router.post('/', auth, requireRole('admin'), upload.single('imagen'), (req, res) => {
+router.post('/', auth, requireRole('admin', 'avanzado'), upload.single('imagen'), (req, res) => {
   const {
     hostname, descripcion, ubicacion, marca, modelo, ip, mac_address, edificio_id, piso_id, area_id,
     nvr_id, switch_conectado, usuario, contrasena, observaciones, estado,
@@ -133,7 +133,7 @@ router.post('/', auth, requireRole('admin'), upload.single('imagen'), (req, res)
 // PUT /api/camaras/:id — RF-04 (Admin). Mismo criterio que el alta: archivo
 // nuevo pisa la imagen anterior; sin archivo, se puede seguir editando la
 // imagen_url a mano.
-router.put('/:id', auth, requireRole('admin'), upload.single('imagen'), (req, res) => {
+router.put('/:id', auth, requireRole('admin', 'avanzado'), upload.single('imagen'), (req, res) => {
   const actual = db.prepare('SELECT * FROM camaras WHERE id = ?').get(req.params.id);
   if (!actual) return res.status(404).json({ error: 'Cámara no encontrada' });
 
@@ -200,7 +200,7 @@ router.put('/:id', auth, requireRole('admin'), upload.single('imagen'), (req, re
 
 // PATCH /api/camaras/:id/estado — RF-05: activar/desactivar es siempre un
 // UPDATE, nunca un DELETE (RNF-06). No hay ruta DELETE para cámaras a propósito.
-router.patch('/:id/estado', auth, requireRole('admin'), (req, res) => {
+router.patch('/:id/estado', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { estado } = req.body;
   if (!ESTADOS.includes(estado)) {
     return res.status(400).json({ error: `estado inválido, debe ser uno de: ${ESTADOS.join(', ')}` });

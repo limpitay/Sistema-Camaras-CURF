@@ -5,10 +5,10 @@ import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 
 // RF-16/RF-20/RF-21/RF-22: todo lo que Dirección ya aprobó/revocó pero
-// Sistemas todavía no replicó en HikCentral. Solo Admin puede marcar acciones.
+// Sistemas todavía no replicó en HikCentral. Solo Admin/Avanzado pueden marcar acciones.
 export default function PendientesHikCentral() {
   const { user } = useAuth();
-  const esAdmin = user?.rol === 'admin';
+  const puedeGestionar = user?.rol === 'admin' || user?.rol === 'avanzado';
   const [items, setItems] = useState([]);
   const [seleccionadas, setSeleccionadas] = useState([]);
   const navigate = useNavigate();
@@ -77,7 +77,7 @@ export default function PendientesHikCentral() {
         const altas = grupo.items.filter((it) => it.activo && !it.aplicado_en_hikcentral);
         const marcadas = altas.filter((it) => seleccionadas.includes(it.id));
         const todasMarcadas = altas.length > 0 && marcadas.length === altas.length;
-        const hayCheckbox = esAdmin && altas.length > 0;
+        const hayCheckbox = puedeGestionar && altas.length > 0;
 
         return (
           <div key={grupo.usuario_id} className="card shadow-sm mb-3">
@@ -112,7 +112,7 @@ export default function PendientesHikCentral() {
                         />
                       </th>
                     )}
-                    <th>Hostname</th><th>Piso</th><th>Edificio</th><th>Área</th><th>Tipo</th><th>Fecha</th>{esAdmin && <th>Acción</th>}
+                    <th>Hostname</th><th>Piso</th><th>Edificio</th><th>Área</th><th>Tipo</th><th>Fecha</th>{puedeGestionar && <th>Acción</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -141,7 +141,7 @@ export default function PendientesHikCentral() {
                           <span className={`badge ${esAlta ? 'bg-warning text-dark' : 'bg-danger'}`}>{esAlta ? 'Alta' : 'Baja'}</span>
                         </td>
                         <td>{new Date(esAlta ? it.fecha_otorgado : it.fecha_revocacion).toLocaleString()}</td>
-                        {esAdmin && (
+                        {puedeGestionar && (
                           <td>
                             {esAlta
                               ? <button className="btn btn-sm btn-success" onClick={() => aplicar(it.id)}>Marcar aplicado</button>

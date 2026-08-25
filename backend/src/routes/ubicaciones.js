@@ -33,8 +33,8 @@ router.get('/edificios', auth, (req, res) => {
   `).all());
 });
 
-// POST /api/ubicaciones/edificios — Admin
-router.post('/edificios', auth, requireRole('admin'), (req, res) => {
+// POST /api/ubicaciones/edificios — Admin/Avanzado
+router.post('/edificios', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { nombre } = req.body;
   if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
 
@@ -45,8 +45,8 @@ router.post('/edificios', auth, requireRole('admin'), (req, res) => {
   res.status(201).json(db.prepare('SELECT * FROM edificios WHERE id = ?').get(lastInsertRowid));
 });
 
-// PUT /api/ubicaciones/edificios/:id — Admin
-router.put('/edificios/:id', auth, requireRole('admin'), (req, res) => {
+// PUT /api/ubicaciones/edificios/:id — Admin/Avanzado
+router.put('/edificios/:id', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { nombre } = req.body;
   if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
   if (!db.prepare('SELECT id FROM edificios WHERE id = ?').get(req.params.id)) {
@@ -93,7 +93,7 @@ router.get('/pisos', auth, (req, res) => {
 
 // POST /api/ubicaciones/pisos — Admin. Piso global: una vez creado queda
 // disponible para elegir en la cámara de cualquier edificio.
-router.post('/pisos', auth, requireRole('admin'), (req, res) => {
+router.post('/pisos', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { nombre } = req.body;
   if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
 
@@ -105,8 +105,8 @@ router.post('/pisos', auth, requireRole('admin'), (req, res) => {
   res.status(201).json(db.prepare('SELECT * FROM pisos WHERE id = ?').get(lastInsertRowid));
 });
 
-// PUT /api/ubicaciones/pisos/:id — Admin
-router.put('/pisos/:id', auth, requireRole('admin'), (req, res) => {
+// PUT /api/ubicaciones/pisos/:id — Admin/Avanzado
+router.put('/pisos/:id', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { nombre } = req.body;
   if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
   if (!db.prepare('SELECT id FROM pisos WHERE id = ?').get(req.params.id)) {
@@ -149,7 +149,7 @@ router.get('/areas', auth, (req, res) => {
 
 // POST /api/ubicaciones/areas — Admin. Área global: una vez creada queda
 // disponible para elegir en la cámara de cualquier edificio y piso.
-router.post('/areas', auth, requireRole('admin'), (req, res) => {
+router.post('/areas', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { nombre } = req.body;
   if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
 
@@ -160,8 +160,8 @@ router.post('/areas', auth, requireRole('admin'), (req, res) => {
   res.status(201).json(db.prepare('SELECT * FROM areas WHERE id = ?').get(lastInsertRowid));
 });
 
-// PUT /api/ubicaciones/areas/:id — Admin
-router.put('/areas/:id', auth, requireRole('admin'), (req, res) => {
+// PUT /api/ubicaciones/areas/:id — Admin/Avanzado
+router.put('/areas/:id', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { nombre } = req.body;
   if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
   if (!db.prepare('SELECT id FROM areas WHERE id = ?').get(req.params.id)) {

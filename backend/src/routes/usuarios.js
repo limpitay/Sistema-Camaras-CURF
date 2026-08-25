@@ -4,14 +4,14 @@ const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
 
 const router = express.Router();
-const ROLES = ['admin', 'sistemas_lectura', 'direccion', 'mando_medio'];
+const ROLES = ['admin', 'avanzado', 'sistemas_lectura', 'direccion', 'mando_medio'];
 
 function boolificar(usuario) {
   return { ...usuario, activo: !!usuario.activo };
 }
 
 // GET /api/usuarios — Admin y Sistemas-lectura ven el mismo padrón (sección 3)
-router.get('/', auth, requireRole('admin', 'sistemas_lectura'), (req, res) => {
+router.get('/', auth, requireRole('admin', 'avanzado', 'sistemas_lectura'), (req, res) => {
   const usuarios = db.prepare(
     'SELECT id, email_institucional, nombre, rol, activo, created_at FROM usuarios ORDER BY nombre'
   ).all();
@@ -19,7 +19,7 @@ router.get('/', auth, requireRole('admin', 'sistemas_lectura'), (req, res) => {
 });
 
 // POST /api/usuarios — RF-01 (Admin): alta manual, previa al primer login
-router.post('/', auth, requireRole('admin'), (req, res) => {
+router.post('/', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { email_institucional, nombre, rol } = req.body;
 
   if (!email_institucional || !nombre || !rol) {
@@ -48,7 +48,7 @@ router.post('/', auth, requireRole('admin'), (req, res) => {
 // PATCH /api/usuarios/:id — RF-03 (Admin): activar/desactivar o cambiar rol.
 // Siempre baja lógica, nunca DELETE (RNF-06) — este usuario puede tener
 // solicitudes y accesos históricos que no deben perder su autoría.
-router.patch('/:id', auth, requireRole('admin'), (req, res) => {
+router.patch('/:id', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { rol, activo } = req.body;
 
   if (rol && !ROLES.includes(rol)) {

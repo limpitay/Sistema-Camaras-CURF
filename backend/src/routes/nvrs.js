@@ -32,8 +32,8 @@ router.get('/:id', auth, (req, res) => {
   res.json({ ...nvr, camaras });
 });
 
-// POST /api/nvrs — Admin
-router.post('/', auth, requireRole('admin'), (req, res) => {
+// POST /api/nvrs — Admin/Avanzado
+router.post('/', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { hostname, ip, mac_address, edificio_id, piso_id } = req.body;
   if (!hostname) return res.status(400).json({ error: 'hostname es requerido' });
   if (edificio_id && !db.prepare('SELECT id FROM edificios WHERE id = ?').get(edificio_id)) {
@@ -58,8 +58,8 @@ router.post('/', auth, requireRole('admin'), (req, res) => {
   res.status(201).json(db.prepare(`${SELECT_BASE} WHERE n.id = ?`).get(lastInsertRowid));
 });
 
-// PUT /api/nvrs/:id — Admin
-router.put('/:id', auth, requireRole('admin'), (req, res) => {
+// PUT /api/nvrs/:id — Admin/Avanzado
+router.put('/:id', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const actual = db.prepare('SELECT * FROM nvrs WHERE id = ?').get(req.params.id);
   if (!actual) return res.status(404).json({ error: 'NVR no encontrado' });
 

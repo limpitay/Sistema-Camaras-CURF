@@ -177,6 +177,10 @@ function ModalAccesoRapido({ modalRapido, setModalRapido, cuentas, usuarios, err
 export default function AccesosNvr() {
   const { user } = useAuth();
   const esAdmin = user?.rol === 'admin';
+  // "avanzado" edita/agrega igual que admin, pero nunca puede eliminar
+  // cuentas ni accesos NVR (los únicos DELETE reales acá) — esos botones
+  // siguen gateados con esAdmin puntualmente.
+  const puedeEditar = esAdmin || user?.rol === 'avanzado';
 
   const [cuentas, setCuentas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
@@ -221,11 +225,11 @@ export default function AccesosNvr() {
 
   useEffect(() => {
     cargarCuentas();
-    if (esAdmin) {
+    if (puedeEditar) {
       client.get('/usuarios').then((res) => setUsuarios(res.data));
       client.get('/camaras').then((res) => setCamaras(res.data));
     }
-  }, [esAdmin]);
+  }, [puedeEditar]);
 
   useEffect(() => {
     setCamaraDetalle(null);
@@ -385,7 +389,7 @@ export default function AccesosNvr() {
               <div>
                 <div className="d-flex align-items-center gap-2">
                   <h1 className="h4 fw-bold mb-1">{detalle.nombre}</h1>
-                  {esAdmin && (
+                  {puedeEditar && (
                     <button className="btn btn-sm btn-outline-secondary" onClick={() => abrirEditarCuenta(detalle)}>Editar cuenta</button>
                   )}
                 </div>
@@ -395,7 +399,7 @@ export default function AccesosNvr() {
                 </p>
               </div>
               <div className="d-flex gap-2">
-                {esAdmin && (
+                {puedeEditar && (
                   <button className="btn btn-primary btn-sm" onClick={abrirNuevoAcceso}>+ Agregar cámara</button>
                 )}
                 <div className="btn-group" role="group">
@@ -424,7 +428,7 @@ export default function AccesosNvr() {
                     <thead className="table-light">
                       <tr>
                         <th>Cámara</th><th>Edificio</th><th>Piso</th><th>Área</th><th>Grupo</th>
-                        <th>En vivo</th><th>Reproducción</th><th>Estado</th>{esAdmin && <th></th>}
+                        <th>En vivo</th><th>Reproducción</th><th>Estado</th>{puedeEditar && <th></th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -442,7 +446,7 @@ export default function AccesosNvr() {
                             <span className={`badge ${c.reproduccion ? 'text-bg-success' : 'text-bg-secondary'}`}>{c.reproduccion ? 'Sí' : 'No'}</span>
                           </td>
                           <td>
-                            {esAdmin ? (
+                            {puedeEditar ? (
                               <button
                                 type="button"
                                 className={`badge border-0 ${c.acceso_estado === 'concedido' ? 'text-bg-success' : 'text-bg-warning'}`}
@@ -457,16 +461,16 @@ export default function AccesosNvr() {
                               </span>
                             )}
                           </td>
-                          {esAdmin && (
+                          {puedeEditar && (
                             <td className="text-end">
                               <button className="btn btn-sm btn-outline-secondary me-1" onClick={() => abrirEditarAcceso(c)}>Editar</button>
-                              <button className="btn btn-sm btn-outline-danger" onClick={() => eliminarAcceso(c)}>Quitar</button>
+                              {esAdmin && <button className="btn btn-sm btn-outline-danger" onClick={() => eliminarAcceso(c)}>Quitar</button>}
                             </td>
                           )}
                         </tr>
                       ))}
                       {detalle.camaras.length === 0 && (
-                        <tr><td colSpan={esAdmin ? 9 : 8} className="text-body-secondary">Esta cuenta todavía no tiene cámaras asignadas</td></tr>
+                        <tr><td colSpan={puedeEditar ? 9 : 8} className="text-body-secondary">Esta cuenta todavía no tiene cámaras asignadas</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -543,9 +547,9 @@ export default function AccesosNvr() {
                       </span>
                     </div>
                   </div>
-                  {esAdmin && (
+                  {puedeEditar && (
                     <div className="modal-footer">
-                      <button type="button" className="btn btn-outline-danger" onClick={() => eliminarAcceso(camaraDetalle)}>Quitar acceso</button>
+                      {esAdmin && <button type="button" className="btn btn-outline-danger" onClick={() => eliminarAcceso(camaraDetalle)}>Quitar acceso</button>}
                       <button
                         type="button"
                         className={`btn ${camaraDetalle.acceso_estado === 'concedido' ? 'btn-outline-warning' : 'btn-outline-success'}`}
@@ -719,7 +723,7 @@ export default function AccesosNvr() {
             está armado en el equipo real. Elegí una cuenta para ver el detalle.
           </p>
         </div>
-        {esAdmin && <button className="btn btn-primary btn-sm" onClick={abrirNuevaCuenta}>+ Agregar cuenta</button>}
+        {puedeEditar && <button className="btn btn-primary btn-sm" onClick={abrirNuevaCuenta}>+ Agregar cuenta</button>}
       </div>
 
       <div className="card shadow-sm mb-3">
@@ -737,7 +741,7 @@ export default function AccesosNvr() {
         <div className="table-responsive">
           <table className="table table-hover align-middle mb-0">
             <thead className="table-light">
-              <tr><th>Cuenta</th><th>Usuario vinculado</th><th>Cámaras</th><th></th>{esAdmin && <th></th>}</tr>
+              <tr><th>Cuenta</th><th>Usuario vinculado</th><th>Cámaras</th><th></th>{puedeEditar && <th></th>}</tr>
             </thead>
             <tbody>
               {cuentasFiltradas.map((c) => (
@@ -746,16 +750,16 @@ export default function AccesosNvr() {
                   <td>{c.usuario_nombre || '—'}</td>
                   <td><span className="badge text-bg-secondary">{c.cantidad_camaras}</span></td>
                   <td className="text-end"><span className="text-body-secondary small">Ver detalle →</span></td>
-                  {esAdmin && (
+                  {puedeEditar && (
                     <td className="text-end" onClick={(e) => e.stopPropagation()}>
                       <button className="btn btn-sm btn-outline-secondary me-1" onClick={() => abrirEditarCuenta(c)}>Editar</button>
-                      <button className="btn btn-sm btn-outline-danger" onClick={() => eliminarCuenta(c)}>Eliminar</button>
+                      {esAdmin && <button className="btn btn-sm btn-outline-danger" onClick={() => eliminarCuenta(c)}>Eliminar</button>}
                     </td>
                   )}
                 </tr>
               ))}
               {cuentasFiltradas.length === 0 && (
-                <tr><td colSpan={esAdmin ? 5 : 4} className="text-body-secondary">
+                <tr><td colSpan={puedeEditar ? 5 : 4} className="text-body-secondary">
                   {cuentas.length === 0 ? 'Todavía no hay cuentas NVR cargadas' : 'Ninguna cuenta coincide con la búsqueda'}
                 </td></tr>
               )}
