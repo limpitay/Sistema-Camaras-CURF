@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import client from '../api/client';
+import client, { urlFoto } from '../api/client';
 import Layout from '../components/Layout';
 import NavModal from '../components/NavModal';
 import { useAuth } from '../context/AuthContext';
 
 // Cuentas configuradas directamente en el NVR/HikCentral (vigilancia,
 // sistemas, enfermeriaqx, etc.) — no son usuarios de este panel, son logins
-// del equipo real. Acá se navega en dos niveles: lista de cuentas -> detalle
-// de qué cámaras puede ver cada una, discriminando en vivo vs reproducción.
-// Alta/edición/baja de cuentas y de accesos puntuales es solo para Admin
+// del equipo real. Aca se navega en dos niveles: lista de cuentas -> detalle
+// de que camaras puede ver cada una, discriminando en vivo vs reproduccion.
+// Alta/edicion/baja de cuentas y de accesos puntuales es solo para Admin
 // (Sistemas-lectura ve todo en modo lectura, igual que el resto del panel).
 const ESTADO_LABEL = { activa: 'Activa', inactiva: 'Inactiva' };
 const ESTADO_BADGE = { activa: 'text-bg-success', inactiva: 'text-bg-secondary' };
@@ -18,7 +18,7 @@ function CamaraThumb({ camara, grande }) {
   return (
     <div className={`camera-thumb ${grande ? 'camera-thumb-lg' : ''}`}>
       {camara.imagen_url ? (
-        <img src={camara.imagen_url} alt={camara.descripcion || camara.hostname} />
+        <img src={urlFoto(camara.imagen_url)} alt={camara.descripcion || camara.hostname} />
       ) : (
         <svg width={grande ? 64 : 40} height={grande ? 64 : 40} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
           <rect x="3" y="7" width="15" height="12" rx="2" /><path d="M18 10l4-2v10l-4-2" />
@@ -36,11 +36,11 @@ function CamaraThumb({ camara, grande }) {
 const NUEVA_CUENTA = '__nueva__';
 
 // Formulario suelto para dar de alta un acceso desde Pendientes HikCentral:
-// la cámara ya viene elegida, acá solo se elige a qué cuenta NVR agregarla —
-// al elegirla se muestra su login/contraseña de HikCentral para tenerlos a
-// mano y aplicar el acceso en el equipo real. Si la cuenta todavía no existe
-// (ej. "dvega" para un usuario nuevo), se puede crear ahí mismo sin salir del
-// flujo — se crea primero, y con esa misma cámara ya queda cargada.
+// la camara ya viene elegida, aca solo se elige a que cuenta NVR agregarla —
+// al elegirla se muestra su login/contrasena de HikCentral para tenerlos a
+// mano y aplicar el acceso en el equipo real. Si la cuenta todavia no existe
+// (ej. "dvega" para un usuario nuevo), se puede crear ahi mismo sin salir del
+// flujo — se crea primero, y con esa misma camara ya queda cargada.
 function ModalAccesoRapido({ modalRapido, setModalRapido, cuentas, usuarios, error, guardando, onSubmit }) {
   const cuentaElegida = cuentas.find((c) => String(c.id) === String(modalRapido.cuenta_id));
   const creandoCuenta = modalRapido.cuenta_id === NUEVA_CUENTA;
@@ -53,7 +53,7 @@ function ModalAccesoRapido({ modalRapido, setModalRapido, cuentas, usuarios, err
               <h2 className="modal-title h5">
                 Agregar acceso — {modalRapido.camaras.length === 1
                   ? (modalRapido.camaras[0].descripcion || modalRapido.camaras[0].hostname)
-                  : `${modalRapido.camaras.length} cámaras`}
+                  : `${modalRapido.camaras.length} camaras`}
               </h2>
               <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setModalRapido(null)} />
             </div>
@@ -77,7 +77,7 @@ function ModalAccesoRapido({ modalRapido, setModalRapido, cuentas, usuarios, err
                   required
                   autoFocus
                 >
-                  <option value="" disabled>Elegí una cuenta...</option>
+                  <option value="" disabled>Elegi una cuenta...</option>
                   <option value={NUEVA_CUENTA}>+ Crear cuenta nueva...</option>
                   {cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                 </select>
@@ -88,7 +88,7 @@ function ModalAccesoRapido({ modalRapido, setModalRapido, cuentas, usuarios, err
                   Login de HikCentral: <strong>{cuentaElegida.nombre}</strong>
                   {cuentaElegida.contrasena
                     ? <> / <strong>{cuentaElegida.contrasena}</strong></>
-                    : <span className="text-body-secondary"> (sin contraseña cargada — editá la cuenta para agregarla)</span>}
+                    : <span className="text-body-secondary"> (sin contrasena cargada — edita la cuenta para agregarla)</span>}
                 </div>
               )}
 
@@ -113,14 +113,14 @@ function ModalAccesoRapido({ modalRapido, setModalRapido, cuentas, usuarios, err
                       onChange={(e) => setModalRapido((m) => ({ ...m, cuentaUsuarioId: e.target.value }))}
                     >
                       <option value="">Sin vincular</option>
-                      {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre} ({u.email_institucional})</option>)}
+                      {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre} ({u.username})</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="form-label">Contraseña de HikCentral (opcional)</label>
+                    <label className="form-label">Contrasena de HikCentral (opcional)</label>
                     <input
                       className="form-control"
-                      placeholder="Contraseña de este login en HikCentral"
+                      placeholder="Contrasena de este login en HikCentral"
                       value={modalRapido.cuentaContrasena}
                       onChange={(e) => setModalRapido((m) => ({ ...m, cuentaContrasena: e.target.value }))}
                       autoComplete="off"
@@ -157,7 +157,7 @@ function ModalAccesoRapido({ modalRapido, setModalRapido, cuentas, usuarios, err
                     checked={modalRapido.reproduccion}
                     onChange={(e) => setModalRapido((m) => ({ ...m, reproduccion: e.target.checked }))}
                   />
-                  <label className="form-check-label" htmlFor="chk-rapido-reproduccion">Reproducción</label>
+                  <label className="form-check-label" htmlFor="chk-rapido-reproduccion">Reproduccion</label>
                 </div>
               </div>
               {error && <div className="alert alert-danger small py-2 mt-3 mb-0">{error}</div>}
@@ -178,7 +178,7 @@ export default function AccesosNvr() {
   const { user } = useAuth();
   const esAdmin = user?.rol === 'admin';
   // "avanzado" edita/agrega igual que admin, pero nunca puede eliminar
-  // cuentas ni accesos NVR (los únicos DELETE reales acá) — esos botones
+  // cuentas ni accesos NVR (los unicos DELETE reales aca) — esos botones
   // siguen gateados con esAdmin puntualmente.
   const puedeEditar = esAdmin || user?.rol === 'avanzado';
 
@@ -202,8 +202,8 @@ export default function AccesosNvr() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Llegada desde Pendientes HikCentral (botón "Agregar en Accesos NVR"): las
-  // cámaras tildadas viajan en el state de la navegación, no por query
+  // Llegada desde Pendientes HikCentral (boton "Agregar en Accesos NVR"): las
+  // camaras tildadas viajan en el state de la navegacion, no por query
   // string, para no dejarlas pegadas en la URL. Se limpia el state al toque
   // (navigate replace) para que un F5 no vuelva a abrir el modal solo.
   useEffect(() => {
@@ -246,7 +246,7 @@ export default function AccesosNvr() {
     if (nuevo) setCamaraDetalle(nuevo);
   };
 
-  // --- Cuentas: alta / edición / baja ---
+  // --- Cuentas: alta / edicion / baja ---
   const abrirNuevaCuenta = () => { setError(''); setModalCuenta({ id: null, nombre: '', usuario_id: '', contrasena: '' }); };
   const abrirEditarCuenta = (c) => { setError(''); setModalCuenta({ id: c.id, nombre: c.nombre, usuario_id: c.usuario_id || '', contrasena: c.contrasena || '' }); };
 
@@ -275,13 +275,13 @@ export default function AccesosNvr() {
     if (cuentaId === c.id) setCuentaId(null);
   };
 
-  // --- Accesos a cámaras: alta / edición / baja ---
+  // --- Accesos a camaras: alta / edicion / baja ---
   const idsConAcceso = new Set((detalle?.camaras || []).map((c) => c.camara_id));
   const camarasParaElegir = camaras.filter((c) => c.id === modalAcceso?.camara_id || !idsConAcceso.has(c.id));
   const camarasFiltradasModal = camarasParaElegir.filter((c) => {
     if (!busquedaCamaraModal.trim()) return true;
     const q = busquedaCamaraModal.trim().toLowerCase();
-    return [c.hostname, c.descripcion, c.edificio, c.area].some((v) => (v || '').toLowerCase().includes(q));
+    return [c.hostname, c.descripcion, c.ip, c.edificio, c.area].some((v) => (v || '').toLowerCase().includes(q));
   });
 
   const abrirNuevoAcceso = () => { setError(''); setBusquedaCamaraModal(''); setModalAcceso({ accesoId: null, camara_id: '', grupo: '', en_vivo: true, reproduccion: true }); };
@@ -293,7 +293,7 @@ export default function AccesosNvr() {
 
   const guardarAcceso = async (e) => {
     e.preventDefault();
-    if (!modalAcceso.camara_id) { setError('Elegí una cámara.'); return; }
+    if (!modalAcceso.camara_id) { setError('Elegi una camara.'); return; }
     setError('');
     setGuardando(true);
     try {
@@ -313,13 +313,13 @@ export default function AccesosNvr() {
     }
   };
 
-  // Alta rápida desde Pendientes HikCentral: la cámara ya viene elegida, acá
-  // solo falta decidir a qué cuenta NVR se le da el acceso.
+  // Alta rapida desde Pendientes HikCentral: la camara ya viene elegida, aca
+  // solo falta decidir a que cuenta NVR se le da el acceso.
   const guardarAccesoRapido = async (e) => {
     e.preventDefault();
-    if (!modalRapido.cuenta_id) { setError('Elegí una cuenta.'); return; }
+    if (!modalRapido.cuenta_id) { setError('Elegi una cuenta.'); return; }
     if (modalRapido.cuenta_id === NUEVA_CUENTA && !modalRapido.cuentaNombre.trim()) {
-      setError('Poné un nombre para la cuenta nueva.');
+      setError('Pone un nombre para la cuenta nueva.');
       return;
     }
     setError('');
@@ -336,7 +336,7 @@ export default function AccesosNvr() {
       }
 
       // Secuencial (no Promise.all) para no pisar la fila de accesos_nvr si
-      // dos cámaras de la tanda generaran algún conflicto raro — son pocas
+      // dos camaras de la tanda generaran algun conflicto raro — son pocas
       // por tanda, la diferencia de tiempo no se nota.
       for (const cam of modalRapido.camaras) {
         await client.post(`/cuentas-nvr/${cuentaIdUsada}/accesos`, {
@@ -348,8 +348,8 @@ export default function AccesosNvr() {
       }
       setModalRapido(null);
       await cargarCuentas();
-      // Entra directo al detalle de la cuenta usada — ahí ya se ve la
-      // cámara recién agregada, sin tener que buscarla de nuevo.
+      // Entra directo al detalle de la cuenta usada — ahi ya se ve la
+      // camara recien agregada, sin tener que buscarla de nuevo.
       setCuentaId(cuentaIdUsada);
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo guardar el acceso');
@@ -367,7 +367,7 @@ export default function AccesosNvr() {
   };
 
   // El estado pendiente/concedido es el "borrador" del admin: pendiente hasta
-  // que aplica el permiso a mano en el NVR/HikCentral real y vuelve acá a
+  // que aplica el permiso a mano en el NVR/HikCentral real y vuelve aca a
   // tildarlo como concedido.
   const toggleEstadoAcceso = async (c) => {
     const nuevoEstado = c.acceso_estado === 'concedido' ? 'pendiente' : 'concedido';
@@ -394,13 +394,13 @@ export default function AccesosNvr() {
                   )}
                 </div>
                 <p className="text-body-secondary mb-0">
-                  {detalle.camaras.length} cámara{detalle.camaras.length === 1 ? '' : 's'} con acceso
+                  {detalle.camaras.length} camara{detalle.camaras.length === 1 ? '' : 's'} con acceso
                   {detalle.usuario_nombre && <> · vinculada a {detalle.usuario_nombre} ({detalle.usuario_email})</>}
                 </p>
               </div>
               <div className="d-flex gap-2">
                 {puedeEditar && (
-                  <button className="btn btn-primary btn-sm" onClick={abrirNuevoAcceso}>+ Agregar cámara</button>
+                  <button className="btn btn-primary btn-sm" onClick={abrirNuevoAcceso}>+ Agregar camara</button>
                 )}
                 <div className="btn-group" role="group">
                   <button
@@ -415,7 +415,7 @@ export default function AccesosNvr() {
                     className={`btn btn-sm ${vista === 'cuadricula' ? 'btn-primary' : 'btn-outline-primary'}`}
                     onClick={() => setVista('cuadricula')}
                   >
-                    Cuadrícula
+                    Cuadricula
                   </button>
                 </div>
               </div>
@@ -427,8 +427,8 @@ export default function AccesosNvr() {
                   <table className="table table-hover align-middle mb-0">
                     <thead className="table-light">
                       <tr>
-                        <th>Cámara</th><th>Edificio</th><th>Piso</th><th>Área</th><th>Grupo</th>
-                        <th>En vivo</th><th>Reproducción</th><th>Estado</th>{puedeEditar && <th></th>}
+                        <th>Camara</th><th>Edificio</th><th>Piso</th><th>Area</th><th>NVR</th><th>Grupo</th>
+                        <th>En vivo</th><th>Reproduccion</th><th>Estado</th>{puedeEditar && <th></th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -438,12 +438,13 @@ export default function AccesosNvr() {
                           <td>{c.edificio}</td>
                           <td>{c.piso}</td>
                           <td>{c.area}</td>
+                          <td>{c.nvr || '—'}</td>
                           <td className="text-body-secondary small">{c.grupo || '—'}</td>
                           <td>
-                            <span className={`badge ${c.en_vivo ? 'text-bg-success' : 'text-bg-secondary'}`}>{c.en_vivo ? 'Sí' : 'No'}</span>
+                            <span className={`badge ${c.en_vivo ? 'text-bg-success' : 'text-bg-secondary'}`}>{c.en_vivo ? 'Si' : 'No'}</span>
                           </td>
                           <td>
-                            <span className={`badge ${c.reproduccion ? 'text-bg-success' : 'text-bg-secondary'}`}>{c.reproduccion ? 'Sí' : 'No'}</span>
+                            <span className={`badge ${c.reproduccion ? 'text-bg-success' : 'text-bg-secondary'}`}>{c.reproduccion ? 'Si' : 'No'}</span>
                           </td>
                           <td>
                             {puedeEditar ? (
@@ -470,14 +471,14 @@ export default function AccesosNvr() {
                         </tr>
                       ))}
                       {detalle.camaras.length === 0 && (
-                        <tr><td colSpan={puedeEditar ? 9 : 8} className="text-body-secondary">Esta cuenta todavía no tiene cámaras asignadas</td></tr>
+                        <tr><td colSpan={puedeEditar ? 10 : 9} className="text-body-secondary">Esta cuenta todavia no tiene camaras asignadas</td></tr>
                       )}
                     </tbody>
                   </table>
                 </div>
               </div>
             ) : detalle.camaras.length === 0 ? (
-              <div className="text-center text-body-secondary py-5">Esta cuenta todavía no tiene cámaras asignadas.</div>
+              <div className="text-center text-body-secondary py-5">Esta cuenta todavia no tiene camaras asignadas.</div>
             ) : (
               <div className="camera-grid">
                 {detalle.camaras.map((c) => (
@@ -489,6 +490,7 @@ export default function AccesosNvr() {
                       <div className="fw-semibold mb-1">{c.hostname}</div>
                       {c.descripcion && <div className="small mb-1">{c.descripcion}</div>}
                       <div className="small text-body-secondary mb-1">{c.piso} · {c.edificio} · {c.area}</div>
+                      <div className="small text-body-secondary mb-1">NVR: {c.nvr || 'Sin asignar'}</div>
                       {c.ip && <div className="small text-body-secondary mb-2">{c.ip}</div>}
                       <div className="d-flex gap-1 flex-wrap">
                         <span className={`badge ${c.en_vivo ? 'text-bg-success' : 'text-bg-secondary'}`}>En vivo{c.en_vivo ? '' : ' no'}</span>
@@ -532,16 +534,18 @@ export default function AccesosNvr() {
                       <dd className="col-8">{camaraDetalle.edificio}</dd>
                       <dt className="col-4 text-body-secondary fw-normal">Piso</dt>
                       <dd className="col-8">{camaraDetalle.piso}</dd>
-                      <dt className="col-4 text-body-secondary fw-normal">Área</dt>
+                      <dt className="col-4 text-body-secondary fw-normal">Area</dt>
                       <dd className="col-8">{camaraDetalle.area}</dd>
+                      <dt className="col-4 text-body-secondary fw-normal">NVR</dt>
+                      <dd className="col-8">{camaraDetalle.nvr || 'Sin asignar'}</dd>
                       {camaraDetalle.ip && (<><dt className="col-4 text-body-secondary fw-normal">IP</dt><dd className="col-8">{camaraDetalle.ip}</dd></>)}
-                      {camaraDetalle.descripcion && (<><dt className="col-4 text-body-secondary fw-normal">Descripción</dt><dd className="col-8">{camaraDetalle.descripcion}</dd></>)}
+                      {camaraDetalle.descripcion && (<><dt className="col-4 text-body-secondary fw-normal">Descripcion</dt><dd className="col-8">{camaraDetalle.descripcion}</dd></>)}
                       {camaraDetalle.observaciones && (<><dt className="col-4 text-body-secondary fw-normal">Observaciones</dt><dd className="col-8">{camaraDetalle.observaciones}</dd></>)}
                       {camaraDetalle.grupo && (<><dt className="col-4 text-body-secondary fw-normal">Grupo</dt><dd className="col-8">{camaraDetalle.grupo}</dd></>)}
                     </dl>
                     <div className="d-flex gap-2 flex-wrap">
-                      <span className={`badge ${camaraDetalle.en_vivo ? 'text-bg-success' : 'text-bg-secondary'}`}>En vivo: {camaraDetalle.en_vivo ? 'Sí' : 'No'}</span>
-                      <span className={`badge ${camaraDetalle.reproduccion ? 'text-bg-success' : 'text-bg-secondary'}`}>Reproducción: {camaraDetalle.reproduccion ? 'Sí' : 'No'}</span>
+                      <span className={`badge ${camaraDetalle.en_vivo ? 'text-bg-success' : 'text-bg-secondary'}`}>En vivo: {camaraDetalle.en_vivo ? 'Si' : 'No'}</span>
+                      <span className={`badge ${camaraDetalle.reproduccion ? 'text-bg-success' : 'text-bg-secondary'}`}>Reproduccion: {camaraDetalle.reproduccion ? 'Si' : 'No'}</span>
                       <span className={`badge ${camaraDetalle.acceso_estado === 'concedido' ? 'text-bg-success' : 'text-bg-warning'}`}>
                         {camaraDetalle.acceso_estado === 'concedido' ? 'Concedido' : 'Pendiente'}
                       </span>
@@ -570,10 +574,10 @@ export default function AccesosNvr() {
         {modalAcceso && (
           <>
             <div className="modal d-block" tabIndex="-1" role="dialog" onClick={(e) => { if (e.target === e.currentTarget) setModalAcceso(null); }}>
-              <div className="modal-dialog modal-dialog-centered" role="document">
+              <div className="modal-dialog modal-dialog-centered" role="document" style={{ maxWidth: 750 }}>
                 <form className="modal-content" onSubmit={guardarAcceso}>
                   <div className="modal-header">
-                    <h2 className="modal-title h5">{modalAcceso.accesoId ? `Editar acceso — ${modalAcceso.nombre}` : 'Agregar cámara'}</h2>
+                    <h2 className="modal-title h5">{modalAcceso.accesoId ? `Editar acceso — ${modalAcceso.nombre}` : 'Agregar camara'}</h2>
                     <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setModalAcceso(null)} />
                   </div>
                   <div className="modal-body">
@@ -585,10 +589,10 @@ export default function AccesosNvr() {
                     )}
                     {!modalAcceso.accesoId && (
                       <div className="mb-3">
-                        <label className="form-label">Cámara</label>
+                        <label className="form-label">Camara</label>
                         <input
                           className="form-control mb-2"
-                          placeholder="Buscar por hostname, descripción, edificio o área..."
+                          placeholder="Buscar por hostname, IP, descripcion, edificio o area..."
                           value={busquedaCamaraModal}
                           onChange={(e) => setBusquedaCamaraModal(e.target.value)}
                         />
@@ -599,10 +603,10 @@ export default function AccesosNvr() {
                           onChange={(e) => setModalAcceso((m) => ({ ...m, camara_id: Number(e.target.value) }))}
                           required
                         >
-                          <option value="" disabled>Elegí una cámara...</option>
+                          <option value="" disabled>Elegi una camara...</option>
                           {camarasFiltradasModal.map((c) => (
                             <option key={c.id} value={c.id}>
-                              {(c.descripcion || c.hostname)} — {c.edificio} · {c.piso} · {c.area}
+                              {(c.descripcion || c.hostname)} — {c.edificio} · {c.piso} · {c.area}{c.ip ? ` · ${c.ip}` : ''}
                             </option>
                           ))}
                         </select>
@@ -636,7 +640,7 @@ export default function AccesosNvr() {
                           checked={modalAcceso.reproduccion}
                           onChange={(e) => setModalAcceso((m) => ({ ...m, reproduccion: e.target.checked }))}
                         />
-                        <label className="form-check-label" htmlFor="chk-reproduccion">Reproducción</label>
+                        <label className="form-check-label" htmlFor="chk-reproduccion">Reproduccion</label>
                       </div>
                     </div>
                     {error && <div className="alert alert-danger small py-2 mt-3 mb-0">{error}</div>}
@@ -681,19 +685,19 @@ export default function AccesosNvr() {
                         onChange={(e) => setModalCuenta((m) => ({ ...m, usuario_id: e.target.value }))}
                       >
                         <option value="">Sin vincular</option>
-                        {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre} ({u.email_institucional})</option>)}
+                        {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre} ({u.username})</option>)}
                       </select>
                     </div>
                     <div className="mb-3">
-                      <label className="form-label">Contraseña de HikCentral (opcional)</label>
+                      <label className="form-label">Contrasena de HikCentral (opcional)</label>
                       <input
                         className="form-control"
-                        placeholder="Contraseña de este login en HikCentral"
+                        placeholder="Contrasena de este login en HikCentral"
                         value={modalCuenta.contrasena}
                         onChange={(e) => setModalCuenta((m) => ({ ...m, contrasena: e.target.value }))}
                         autoComplete="off"
                       />
-                      <div className="form-text">Sirve para tenerla a mano al aplicar accesos pendientes — no es la contraseña de este panel.</div>
+                      <div className="form-text">Sirve para tenerla a mano al aplicar accesos pendientes — no es la contrasena de este panel.</div>
                     </div>
                     {error && <div className="alert alert-danger small py-2 mb-0">{error}</div>}
                   </div>
@@ -719,8 +723,8 @@ export default function AccesosNvr() {
         <div>
           <h1 className="h4 fw-bold mb-1">Accesos NVR</h1>
           <p className="text-body-secondary mb-0">
-            Cuentas configuradas en el NVR/HikCentral y a qué cámaras accede cada una — reflejan lo que ya
-            está armado en el equipo real. Elegí una cuenta para ver el detalle.
+            Cuentas configuradas en el NVR/HikCentral y a que camaras accede cada una — reflejan lo que ya
+            esta armado en el equipo real. Elegi una cuenta para ver el detalle.
           </p>
         </div>
         {puedeEditar && <button className="btn btn-primary btn-sm" onClick={abrirNuevaCuenta}>+ Agregar cuenta</button>}
@@ -741,7 +745,7 @@ export default function AccesosNvr() {
         <div className="table-responsive">
           <table className="table table-hover align-middle mb-0">
             <thead className="table-light">
-              <tr><th>Cuenta</th><th>Usuario vinculado</th><th>Cámaras</th><th></th>{puedeEditar && <th></th>}</tr>
+              <tr><th>Cuenta</th><th>Usuario vinculado</th><th>Camaras</th><th></th>{puedeEditar && <th></th>}</tr>
             </thead>
             <tbody>
               {cuentasFiltradas.map((c) => (
@@ -760,7 +764,7 @@ export default function AccesosNvr() {
               ))}
               {cuentasFiltradas.length === 0 && (
                 <tr><td colSpan={puedeEditar ? 5 : 4} className="text-body-secondary">
-                  {cuentas.length === 0 ? 'Todavía no hay cuentas NVR cargadas' : 'Ninguna cuenta coincide con la búsqueda'}
+                  {cuentas.length === 0 ? 'Todavia no hay cuentas NVR cargadas' : 'Ninguna cuenta coincide con la busqueda'}
                 </td></tr>
               )}
             </tbody>
@@ -797,19 +801,19 @@ export default function AccesosNvr() {
                       onChange={(e) => setModalCuenta((m) => ({ ...m, usuario_id: e.target.value }))}
                     >
                       <option value="">Sin vincular</option>
-                      {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre} ({u.email_institucional})</option>)}
+                      {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre} ({u.username})</option>)}
                     </select>
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">Contraseña de HikCentral (opcional)</label>
+                    <label className="form-label">Contrasena de HikCentral (opcional)</label>
                     <input
                       className="form-control"
-                      placeholder="Contraseña de este login en HikCentral"
+                      placeholder="Contrasena de este login en HikCentral"
                       value={modalCuenta.contrasena}
                       onChange={(e) => setModalCuenta((m) => ({ ...m, contrasena: e.target.value }))}
                       autoComplete="off"
                     />
-                    <div className="form-text">Sirve para tenerla a mano al aplicar accesos pendientes — no es la contraseña de este panel.</div>
+                    <div className="form-text">Sirve para tenerla a mano al aplicar accesos pendientes — no es la contrasena de este panel.</div>
                   </div>
                   {error && <div className="alert alert-danger small py-2 mb-0">{error}</div>}
                 </div>

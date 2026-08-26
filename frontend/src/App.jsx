@@ -3,8 +3,10 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import VistaMandoMedio from './pages/VistaMandoMedio';
 import MisSolicitudes from './pages/MisSolicitudes';
-import InventarioAdmin from './pages/InventarioAdmin';
+import Dashboard from './pages/Dashboard';
 import Crud from './pages/Crud';
+import Usuarios from './pages/Usuarios';
+import RolesPermisos from './pages/RolesPermisos';
 import Solicitudes from './pages/Solicitudes';
 import PendientesHikCentral from './pages/PendientesHikCentral';
 import Historial from './pages/Historial';
@@ -22,7 +24,7 @@ function Home() {
   const { user } = useAuth();
   if (user?.rol === 'mando_medio') return <Navigate to="/camaras" />;
   if (user?.rol === 'direccion') return <Navigate to="/solicitudes" />;
-  return <Navigate to="/inventario" />;
+  return <Navigate to="/dashboard" />;
 }
 
 export default function App() {
@@ -40,12 +42,20 @@ export default function App() {
             <PrivateRoute roles={['mando_medio']}><MisSolicitudes /></PrivateRoute>
           } />
 
-          <Route path="/inventario" element={
-            <PrivateRoute roles={['admin', 'avanzado', 'sistemas_lectura']}><InventarioAdmin /></PrivateRoute>
+          <Route path="/dashboard" element={
+            <PrivateRoute roles={['admin', 'avanzado', 'sistemas_lectura']}><Dashboard /></PrivateRoute>
           } />
 
           <Route path="/crud" element={
-            <PrivateRoute roles={['admin', 'avanzado']}><Crud /></PrivateRoute>
+            <PrivateRoute roles={['admin', 'avanzado', 'sistemas_lectura']}><Crud /></PrivateRoute>
+          } />
+
+          <Route path="/usuarios" element={
+            <PrivateRoute roles={['admin', 'avanzado']}><Usuarios /></PrivateRoute>
+          } />
+
+          <Route path="/roles-permisos" element={
+            <PrivateRoute roles={['admin']}><RolesPermisos /></PrivateRoute>
           } />
 
           <Route path="/solicitudes" element={

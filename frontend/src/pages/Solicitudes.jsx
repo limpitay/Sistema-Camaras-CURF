@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
-import client from '../api/client';
+import client, { urlFoto } from '../api/client';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 
 const BADGE = { pendiente: 'bg-warning text-dark', aprobada: 'bg-success', rechazada: 'bg-danger' };
 const ETIQUETAS = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' };
 
-// RF-13: Dirección aprueba/rechaza la solicitud completa (todas sus cámaras
-// juntas — así quedó modelado: el estado vive en la cabecera, no por cámara).
-// Admin y Sistemas-lectura solo consultan (mismo panel, sin botones de resolución).
+// RF-13: Direccion aprueba/rechaza la solicitud completa (todas sus camaras
+// juntas — asi quedo modelado: el estado vive en la cabecera, no por camara).
+// Admin y Sistemas-lectura solo consultan (mismo panel, sin botones de resolucion).
 export default function Solicitudes() {
   const { user } = useAuth();
   const puedeResolver = ['direccion', 'admin', 'avanzado'].includes(user?.rol);
@@ -128,7 +128,7 @@ export default function Solicitudes() {
                 <div className="modal-body">
                   <div className="camera-thumb camera-thumb-lg mb-3">
                     {detalleCamara.imagen_url ? (
-                      <img src={detalleCamara.imagen_url} alt={detalleCamara.descripcion || detalleCamara.hostname} />
+                      <img src={urlFoto(detalleCamara.imagen_url)} alt={detalleCamara.descripcion || detalleCamara.hostname} />
                     ) : (
                       <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                         <rect x="3" y="7" width="15" height="12" rx="2" /><path d="M18 10l4-2v10l-4-2" />
@@ -141,9 +141,9 @@ export default function Solicitudes() {
                     <dd className="col-8">{detalleCamara.edificio}</dd>
                     <dt className="col-4 text-body-secondary fw-normal">Piso</dt>
                     <dd className="col-8">{detalleCamara.piso}</dd>
-                    <dt className="col-4 text-body-secondary fw-normal">Área</dt>
+                    <dt className="col-4 text-body-secondary fw-normal">Area</dt>
                     <dd className="col-8">{detalleCamara.area}</dd>
-                    {detalleCamara.descripcion && (<><dt className="col-4 text-body-secondary fw-normal">Descripción</dt><dd className="col-8">{detalleCamara.descripcion}</dd></>)}
+                    {detalleCamara.descripcion && (<><dt className="col-4 text-body-secondary fw-normal">Descripcion</dt><dd className="col-8">{detalleCamara.descripcion}</dd></>)}
                     {detalleCamara.observaciones && (<><dt className="col-4 text-body-secondary fw-normal">Observaciones</dt><dd className="col-8">{detalleCamara.observaciones}</dd></>)}
                   </dl>
                 </div>

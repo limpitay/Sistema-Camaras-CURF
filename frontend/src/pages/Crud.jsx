@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import client from '../api/client';
+import { useSearchParams } from 'react-router-dom';
+import client, { urlFoto } from '../api/client';
 import Layout from '../components/Layout';
 import UbicacionSelector from '../components/UbicacionSelector';
 import NavModal from '../components/NavModal';
@@ -7,36 +8,28 @@ import { AREAS_SUGERIDAS } from '../constants/areasSugeridas';
 import { useAuth } from '../context/AuthContext';
 
 const TABS = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'camaras', label: 'Cámaras' },
+  { id: 'camaras', label: 'Camaras' },
   { id: 'nvrs', label: 'NVR' },
   { id: 'edificios', label: 'Edificios' },
   { id: 'pisos', label: 'Pisos' },
-  { id: 'areas', label: 'Áreas' },
+  { id: 'areas', label: 'Areas' },
 ];
 
 const ESTADOS = ['activa', 'inactiva'];
 const SIN_MARCA = '__sin_marca__';
-// Paleta categórica para el gráfico de torta de "Cámaras por marca" — azul y
-// naranja, validados con scripts/validate_palette.js de la skill de dataviz
-// (separación CVD, piso de contraste y banda de luminosidad, los 3 en verde
-// sobre el fondo oscuro del panel). El azul institucional del tema ($primary)
-// no pasa el piso de contraste como marca de gráfico chico, por eso son
-// colores aparte, no --bs-primary.
-const COLORES_MARCA = ['#3987e5', '#d95926', '#199e70', '#c98500'];
 const ESTADO_LABEL = { activa: 'Activa', inactiva: 'Inactiva' };
 const ESTADO_BADGE = { activa: 'text-bg-success', inactiva: 'text-bg-secondary' };
 
-// Panel CRUD (por ahora) para el inventario: Cámaras, NVR, Edificio, Piso y
-// Área. El alta/edición de cámaras vive acá (no en "Inventario de cámaras",
-// que quedó de solo lectura para Admin y Sistemas-lectura). No hay borrado
-// de cámaras a propósito (RNF-06: baja lógica vía el campo Activa/Inactiva,
+// Panel CRUD (por ahora) para el inventario: Camaras, NVR, Edificio, Piso y
+// Area. El alta/edicion de camaras vive aca (no en "Inventario de camaras",
+// que quedo de solo lectura para Admin y Sistemas-lectura). No hay borrado
+// de camaras a proposito (RNF-06: baja logica via el campo Activa/Inactiva,
 // nunca DELETE — mismo criterio que el resto del sistema). Edificio/Piso/
-// Área son catálogos globales independientes (ver 011_pisos_globales.sql):
-// borrarlos o renombrarlos si tienen cámaras o NVRs asociados queda
+// Area son catalogos globales independientes (ver 011_pisos_globales.sql):
+// borrarlos o renombrarlos si tienen camaras o NVRs asociados queda
 // bloqueado en el backend, para no romper referencias.
 
-// Busca `q` como substring, sin importar mayúsculas/minúsculas, dentro de
+// Busca `q` como substring, sin importar mayusculas/minusculas, dentro de
 // cualquiera de los campos de texto que se le pasen.
 function coincideBusqueda(fila, q, campos) {
   if (!q.trim()) return true;
@@ -47,8 +40,8 @@ function coincideBusqueda(fila, q, campos) {
 const FILTRO_VACIO = { edificioId: null, pisoId: null, areaId: null, nvrId: '' };
 
 // Los links de "Compartir" de Google Drive (.../file/d/<ID>/view o
-// ?id=<ID>) muestran una página de vista previa, no la imagen directa, así
-// que un <img src> nunca los renderiza — se convierten acá al formato que sí
+// ?id=<ID>) muestran una pagina de vista previa, no la imagen directa, asi
+// que un <img src> nunca los renderiza — se convierten aca al formato que si
 // sirve como imagen embebida.
 function normalizarUrlImagen(url) {
   if (!url) return url;
@@ -58,8 +51,8 @@ function normalizarUrlImagen(url) {
   return id ? `https://drive.google.com/uc?export=view&id=${id}` : url;
 }
 
-// Compara IPs octeto por octeto (numérico), no como texto — si no, "192.168.0.9"
-// quedaría después de "192.168.0.10". Las cámaras sin IP cargada van siempre al final.
+// Compara IPs octeto por octeto (numerico), no como texto — si no, "192.168.0.9"
+// quedaria despues de "192.168.0.10". Las camaras sin IP cargada van siempre al final.
 function compararIp(a, b) {
   if (!a && !b) return 0;
   if (!a) return 1;
@@ -73,10 +66,10 @@ function compararIp(a, b) {
   return 0;
 }
 
-// Edificio/Piso/Área/NVR + un buscador de texto, reutilizado en las 5
-// pestañas. Edificio/Piso/Área usan el mismo UbicacionSelector de siempre;
+// Edificio/Piso/Area/NVR + un buscador de texto, reutilizado en las 5
+// pestanas. Edificio/Piso/Area usan el mismo UbicacionSelector de siempre;
 // NVR es un select aparte porque UbicacionSelector no lo conoce.
-function FiltrosCrud({ busqueda, onBusqueda, placeholderBusqueda, filtro, onFiltro, nvrs, extra }) {
+function FiltrosCrud({ busqueda, onBusqueda, placeholderBusqueda, filtro, onFiltro, nvrs, extra, camposUbicacion, mostrarNvr = true }) {
   return (
     <div className="card-body border-bottom">
       <div className="row g-3 align-items-end">
@@ -84,52 +77,92 @@ function FiltrosCrud({ busqueda, onBusqueda, placeholderBusqueda, filtro, onFilt
           <label className="form-label fw-semibold">Buscar</label>
           <input className="form-control" placeholder={placeholderBusqueda} value={busqueda} onChange={(e) => onBusqueda(e.target.value)} />
         </div>
-        <div className="col-12 col-lg-8">
-          <UbicacionSelector
-            edificioId={filtro.edificioId}
-            pisoId={filtro.pisoId}
-            areaId={filtro.areaId}
-            onChange={(u) => onFiltro({ ...filtro, ...u })}
-          />
-        </div>
-        <div className="col-6 col-md-3">
-          <label className="form-label fw-semibold">NVR</label>
-          <select className="form-select" value={filtro.nvrId} onChange={(e) => onFiltro({ ...filtro, nvrId: e.target.value })}>
-            <option value="">Todos</option>
-            <option value="sin">Sin NVR</option>
-            {nvrs.map((n) => <option key={n.id} value={n.id}>{n.hostname}</option>)}
-          </select>
-        </div>
+        {camposUbicacion?.length !== 0 && (
+          <div className="col-12 col-lg-8">
+            <UbicacionSelector
+              edificioId={filtro.edificioId}
+              pisoId={filtro.pisoId}
+              areaId={filtro.areaId}
+              onChange={(u) => onFiltro({ ...filtro, ...u })}
+              {...(camposUbicacion ? { campos: camposUbicacion } : {})}
+            />
+          </div>
+        )}
+        {mostrarNvr && (
+          <div className="col-6 col-md-3">
+            <label className="form-label fw-semibold">NVR</label>
+            <select className="form-select" value={filtro.nvrId} onChange={(e) => onFiltro({ ...filtro, nvrId: e.target.value })}>
+              <option value="">Todos</option>
+              <option value="sin">Sin NVR</option>
+              {nvrs.map((n) => <option key={n.id} value={n.id}>{n.hostname}</option>)}
+            </select>
+          </div>
+        )}
         {extra}
       </div>
     </div>
   );
 }
 
-// ¿Hay al menos una cámara que sea de esta fila (campoPropio=valorPropio, ej.
-// area_id=3) y que además cumpla el resto de los filtros activos? Sirve para
-// filtrar Edificios/Pisos/Áreas/NVR por dimensiones que no tienen como campo
-// directo — ej. qué áreas existen dentro del edificio X, mirando qué cámaras
-// de esa área caen en ese edificio.
-function tieneCamaraCoincidente(camaras, campoPropio, filtro) {
-  const otros = { ...filtro };
-  delete otros[{ edificio_id: 'edificioId', piso_id: 'pisoId', area_id: 'areaId' }[campoPropio]];
-  return (valorPropio) => camaras.some((c) =>
-    c[campoPropio] === valorPropio &&
-    (!otros.edificioId || c.edificio_id === otros.edificioId) &&
-    (!otros.pisoId || c.piso_id === otros.pisoId) &&
-    (!otros.areaId || c.area_id === otros.areaId) &&
-    (otros.nvrId === 'sin' ? !c.nvr_id : (!otros.nvrId || String(c.nvr_id) === otros.nvrId))
-  );
-}
-
 export default function Crud() {
-  const { user } = useAuth();
-  // El rol "avanzado" tiene el mismo acceso que admin salvo borrado físico
-  // (edificios/pisos/áreas/NVR) — esos son los únicos DELETE reales del
-  // sistema, así que los botones de Borrar quedan exclusivos de admin.
+  const { user, permisos } = useAuth();
+  // El rol "avanzado" tiene el mismo acceso que admin salvo borrado fisico
+  // (edificios/pisos/areas/NVR) — esos son los unicos DELETE reales del
+  // sistema, asi que los botones de Borrar quedan exclusivos de admin.
   const puedeBorrar = user?.rol === 'admin';
-  const [tab, setTab] = useState('camaras');
+  // sistemas_lectura llega a Camaras/NVR de Recursos de solo lectura — el
+  // backend ya rechaza sus POST/PUT (camaras.js/nvrs.js piden admin/avanzado),
+  // asi que ocultar estos botones aca es solo para no ofrecer una accion que
+  // termina en 403.
+  const puedeEditar = user?.rol !== 'sistemas_lectura';
+  // Columnas/filtros ocultos por rol (Configuracion → Roles y permisos).
+  // admin/sin cargar todavia = nada oculto.
+  const colOculta = (tabla, columna) => !!permisos?.columnasOcultas?.[tabla]?.includes(columna);
+  const filtroOculto = (tabla, filtro) => !!permisos?.filtrosOcultos?.[tabla]?.includes(filtro);
+  // El tab activo vive en la URL (?tab=...) para que el sidebar (Layout,
+  // grupo "CRUD" desplegable estilo GLPI) pueda linkear directo a cada uno.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabIds = TABS.map((t) => t.id);
+  const [tab, setTabState] = useState(() => {
+    const desdeUrl = searchParams.get('tab');
+    return tabIds.includes(desdeUrl) ? desdeUrl : 'camaras';
+  });
+  const setTab = (nuevoTab) => {
+    setTabState(nuevoTab);
+    setSearchParams((prev) => {
+      const siguiente = new URLSearchParams(prev);
+      siguiente.set('tab', nuevoTab);
+      return siguiente;
+    }, { replace: true });
+  };
+  // Si cambia el ?tab= por afuera (click en el sidebar, atras/adelante del
+  // navegador) hay que reflejarlo aca — Crud no se remonta entre esos clicks
+  // porque siguen siendo la misma ruta /crud.
+  useEffect(() => {
+    const desdeUrl = searchParams.get('tab');
+    if (tabIds.includes(desdeUrl) && desdeUrl !== tab) setTabState(desdeUrl);
+    else if (!desdeUrl) setSearchParams((prev) => { const s = new URLSearchParams(prev); s.set('tab', tab); return s; }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Dashboard.jsx manda aca con ?tab=camaras&nvrId=... o &marca=... para
+  // llegar a Camaras ya filtrado (ej. "Grabando" → nvrId=con). Se consume
+  // una sola vez al montar y se limpia de la URL, para no reaplicar el
+  // filtro si despues el usuario cambia de tab y vuelve.
+  useEffect(() => {
+    const nvrId = searchParams.get('nvrId');
+    const marca = searchParams.get('marca');
+    if (!nvrId && !marca) return;
+    if (nvrId) setFiltroCam((f) => ({ ...f, nvrId }));
+    if (marca) setFiltroCamMarca(marca);
+    setSearchParams((prev) => {
+      const s = new URLSearchParams(prev);
+      s.delete('nvrId');
+      s.delete('marca');
+      return s;
+    }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [camaras, setCamaras] = useState([]);
   const [nvrs, setNvrs] = useState([]);
@@ -153,7 +186,6 @@ export default function Crud() {
 
   const [modal, setModal] = useState(null);
   const [detalleCamara, setDetalleCamara] = useState(null);
-  const [nvrDetalle, setNvrDetalle] = useState(null);
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
 
@@ -208,7 +240,7 @@ export default function Crud() {
     try {
       if (modal.tipo === 'camara') {
         if (!modal.edificio_id || !modal.piso_id || !modal.area_id) {
-          setError('Elegí edificio, piso y área para la cámara.');
+          setError('Elegi edificio, piso y area para la camara.');
           return;
         }
         const datos = new FormData();
@@ -313,93 +345,26 @@ export default function Crud() {
     setFiltroCamMarca('');
   };
 
-  const nvrTieneCamaraEnArea = (n) => !filtroNvrTab.areaId || camaras.some((c) => c.nvr_id === n.id && c.area_id === filtroNvrTab.areaId);
   const nvrsFiltrados = nvrs.filter((n) =>
     coincideBusqueda(n, busquedaNvrs, ['hostname', 'ip', 'mac_address', 'edificio', 'piso']) &&
     (!filtroNvrTab.edificioId || n.edificio_id === filtroNvrTab.edificioId) &&
-    (!filtroNvrTab.pisoId || n.piso_id === filtroNvrTab.pisoId) &&
-    nvrTieneCamaraEnArea(n) &&
     (filtroNvrTab.nvrId === 'sin' ? false : (!filtroNvrTab.nvrId || String(n.id) === filtroNvrTab.nvrId))
   );
 
-  const edificioTieneCamaraCoincidente = tieneCamaraCoincidente(camaras, 'edificio_id', filtroEdifTab);
-  const edificiosFiltrados = edificios.filter((e) =>
-    coincideBusqueda(e, busquedaEdificios, ['nombre']) &&
-    (!filtroEdifTab.edificioId || e.id === filtroEdifTab.edificioId) &&
-    (!filtroEdifTab.pisoId && !filtroEdifTab.areaId && !filtroEdifTab.nvrId ? true : edificioTieneCamaraCoincidente(e.id))
-  );
-
-  const pisoTieneCamaraCoincidente = tieneCamaraCoincidente(camaras, 'piso_id', filtroPisoTab);
-  const pisosFiltrados = pisos.filter((p) =>
-    coincideBusqueda(p, busquedaPisos, ['nombre']) &&
-    (!filtroPisoTab.pisoId || p.id === filtroPisoTab.pisoId) &&
-    (!filtroPisoTab.edificioId && !filtroPisoTab.areaId && !filtroPisoTab.nvrId ? true : pisoTieneCamaraCoincidente(p.id))
-  );
+  // Sin filtro de ubicacion/NVR en estos dos tabs (ver FiltrosCrud mas abajo)
+  // — alcanza con el buscador de texto.
+  const edificiosFiltrados = edificios.filter((e) => coincideBusqueda(e, busquedaEdificios, ['nombre']));
+  const pisosFiltrados = pisos.filter((p) => coincideBusqueda(p, busquedaPisos, ['nombre']));
 
   const areasFiltradas = areas.filter((a) => coincideBusqueda(a, busquedaAreas, ['nombre']));
 
-
-  // Dashboard (RF-04): "graba"/"no graba" no es un campo propio de la cámara
-  // — no es lo mismo que activa/inactiva (eso es de alta/baja en el panel de
-  // accesos, no dice si el equipo real está grabando). Una cámara sin NVR
-  // asignado no tiene dónde grabar, así que se toma nvr_id como el indicador.
-  const camarasGrabando = camaras.filter((c) => c.nvr_id);
-  const camarasSinGrabar = camaras.filter((c) => !c.nvr_id);
-
-  const contarPorMarca = (lista) => {
-    const mapa = {};
-    for (const c of lista) {
-      const valor = c.marca || SIN_MARCA;
-      mapa[valor] = (mapa[valor] || 0) + 1;
-    }
-    return Object.entries(mapa)
-      .map(([valor, cantidad]) => ({ valor, marca: valor === SIN_MARCA ? 'Sin marca' : valor, cantidad }))
-      .sort((a, b) => b.cantidad - a.cantidad);
-  };
-
-  const irACamarasFiltradas = (filtro) => {
-    setBusquedaCamaras('');
-    setFiltroCam({ ...FILTRO_VACIO, ...filtro.cam });
-    setFiltroCamEstado(filtro.estado ?? '');
-    setFiltroCamMarca(filtro.marca ?? '');
-    setTab('camaras');
-  };
-
-  const porMarca = contarPorMarca(camaras);
-
-  // El color de cada marca sale de su nombre (orden alfabético), no de su
-  // lugar en el ranking de porMarca — si no, el día que Hikvision supere a
-  // Dahua en cantidad, las dos intercambiarían de color entre un refresh y
-  // el otro, y eso rompe la asociación color→marca que ya aprendió el ojo.
-  const marcasParaColor = [...new Set(camaras.map((c) => c.marca || 'Sin marca'))].sort();
-  const colorPorMarca = Object.fromEntries(marcasParaColor.map((m, i) => [m, COLORES_MARCA[i % COLORES_MARCA.length]]));
-
-  const gradienteMarca = (() => {
-    if (camaras.length === 0) return null;
-    let acumulado = 0;
-    const paradas = porMarca.map(({ marca, cantidad }) => {
-      const desde = (acumulado / camaras.length) * 100;
-      acumulado += cantidad;
-      const hasta = (acumulado / camaras.length) * 100;
-      return `${colorPorMarca[marca]} ${desde}% ${hasta}%`;
-    });
-    return `conic-gradient(${paradas.join(', ')})`;
-  })();
-
-  const camarasDelNvrDetalle = nvrDetalle
-    ? camaras.filter((c) => (nvrDetalle.id === 'sin' ? !c.nvr_id : c.nvr_id === nvrDetalle.id))
-    : [];
-  const camarasSinNvr = camaras.filter((c) => !c.nvr_id);
-  const porMarcaDelNvrDetalle = contarPorMarca(camarasDelNvrDetalle);
-  const maxPorMarcaDelNvrDetalle = porMarcaDelNvrDetalle[0]?.cantidad || 1;
-
   return (
     <Layout>
-      <h1 className="h4 fw-bold mb-1">CRUD (por ahora)</h1>
+      <h1 className="h4 fw-bold mb-1">Recursos</h1>
       <p className="text-body-secondary mb-4">
-        Cámaras, NVR, Edificio, Piso y Área. Edificio, Piso y Área son listas independientes entre sí (un
-        piso no pertenece a un edificio puntual). No hay borrado de cámaras — dar de baja es marcarla
-        Inactiva. Borrar un edificio/piso/área/NVR que ya está en uso queda bloqueado, para no romper
+        Camaras, NVR, Edificio, Piso y Area. Edificio, Piso y Area son listas independientes entre si (un
+        piso no pertenece a un edificio puntual). No hay borrado de camaras — dar de baja es marcarla
+        Inactiva. Borrar un edificio/piso/area/NVR que ya esta en uso queda bloqueado, para no romper
         referencias.
       </p>
 
@@ -411,119 +376,10 @@ export default function Crud() {
         ))}
       </ul>
 
-      {tab === 'dashboard' && (
-        <div className="d-flex flex-column gap-3">
-          <div className="row g-3">
-            <div className="col-6 col-md-3">
-              <button type="button" className="card shadow-sm h-100 w-100 text-start dashboard-tile" onClick={() => irACamarasFiltradas({})}>
-                <div className="card-body">
-                  <div className="text-body-secondary small">Total cámaras</div>
-                  <div className="fs-3 fw-bold">{camaras.length}</div>
-                </div>
-              </button>
-            </div>
-            <div className="col-6 col-md-3">
-              <button type="button" className="card shadow-sm h-100 w-100 text-start dashboard-tile" onClick={() => irACamarasFiltradas({ cam: { nvrId: 'con' } })}>
-                <div className="card-body">
-                  <div className="text-body-secondary small">Grabando</div>
-                  <div className="fs-3 fw-bold text-success">{camarasGrabando.length}</div>
-                </div>
-              </button>
-            </div>
-            <div className="col-6 col-md-3">
-              <button type="button" className="card shadow-sm h-100 w-100 text-start dashboard-tile" onClick={() => irACamarasFiltradas({ cam: { nvrId: 'sin' } })}>
-                <div className="card-body">
-                  <div className="text-body-secondary small">No graban</div>
-                  <div className="fs-3 fw-bold text-body-secondary">{camarasSinGrabar.length}</div>
-                </div>
-              </button>
-            </div>
-            <div className="col-6 col-md-3">
-              <button type="button" className="card shadow-sm h-100 w-100 text-start dashboard-tile" onClick={() => setTab('nvrs')}>
-                <div className="card-body">
-                  <div className="text-body-secondary small">NVRs</div>
-                  <div className="fs-3 fw-bold">{nvrs.length}</div>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <div className="row g-3">
-            <div className="col-12 col-lg-6">
-              <div className="card shadow-sm h-100">
-                <div className="card-header fw-semibold">
-                  Cámaras por marca <span className="text-body-secondary fw-normal small">(clic para filtrar)</span>
-                </div>
-                <div className="card-body">
-                  {porMarca.length > 0 ? (
-                    <div className="d-flex align-items-center gap-4 flex-wrap">
-                      <div
-                        role="img"
-                        aria-label={`Cámaras por marca: ${porMarca.map((m) => `${m.marca} ${m.cantidad}`).join(', ')}`}
-                        style={{ width: 160, height: 160, borderRadius: '50%', background: gradienteMarca, flexShrink: 0 }}
-                      />
-                      <ul className="list-unstyled mb-0 flex-grow-1">
-                        {porMarca.map(({ marca, valor, cantidad }) => (
-                          <li key={valor} className="mb-2">
-                            <button
-                              type="button"
-                              className="btn p-0 border-0 bg-transparent w-100 d-flex align-items-center gap-2 dashboard-marca"
-                              onClick={() => irACamarasFiltradas({ marca: valor })}
-                            >
-                              <span style={{ width: 14, height: 14, borderRadius: 3, background: colorPorMarca[marca], flexShrink: 0 }} />
-                              <span>{marca}</span>
-                              <span className="text-body-secondary ms-auto">{cantidad} ({Math.round((cantidad / camaras.length) * 100)}%)</span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : (
-                    <p className="text-body-secondary mb-0">Todavía no hay cámaras cargadas</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="col-12 col-lg-6">
-              <div className="card shadow-sm h-100">
-                <div className="card-header fw-semibold">
-                  NVR <span className="text-body-secondary fw-normal small">(clic para ver detalle)</span>
-                </div>
-                <div className="list-group list-group-flush" style={{ maxHeight: 420, overflowY: 'auto' }}>
-                  {nvrs.map((n) => (
-                    <button
-                      key={n.id}
-                      type="button"
-                      className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                      onClick={() => setNvrDetalle(n)}
-                    >
-                      <span>{n.hostname}</span>
-                      <span className="badge text-bg-secondary rounded-pill">{camaras.filter((c) => c.nvr_id === n.id).length}</span>
-                    </button>
-                  ))}
-                  {camarasSinNvr.length > 0 && (
-                    <button
-                      type="button"
-                      className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                      onClick={() => setNvrDetalle({ id: 'sin', hostname: 'Sin NVR' })}
-                    >
-                      <span className="text-body-secondary fst-italic">Sin NVR</span>
-                      <span className="badge text-bg-secondary rounded-pill">{camarasSinNvr.length}</span>
-                    </button>
-                  )}
-                  {nvrs.length === 0 && camarasSinNvr.length === 0 && <div className="list-group-item text-body-secondary">Todavía no hay NVRs cargados</div>}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {tab === 'camaras' && (
         <div className="card shadow-sm">
           <div className="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <span className="fw-semibold">Cámaras <span className="text-body-secondary fw-normal">({camarasFiltradas.length} de {camaras.length})</span></span>
+            <span className="fw-semibold">Camaras <span className="text-body-secondary fw-normal">({camarasFiltradas.length} de {camaras.length})</span></span>
             <div className="d-flex gap-2">
               <div className="btn-group" role="group">
                 <button
@@ -541,33 +397,39 @@ export default function Crud() {
                   Tarjetas
                 </button>
               </div>
-              <button className="btn btn-primary btn-sm" onClick={() => abrirModalCamara()}>+ Agregar</button>
+              {puedeEditar && <button className="btn btn-primary btn-sm" onClick={() => abrirModalCamara()}>+ Agregar</button>}
             </div>
           </div>
           <FiltrosCrud
             busqueda={busquedaCamaras}
             onBusqueda={setBusquedaCamaras}
-            placeholderBusqueda="IP, MAC, Hostname, Área o Descripción..."
+            placeholderBusqueda="IP, MAC, Hostname, Area o Descripcion..."
             filtro={filtroCam}
             onFiltro={setFiltroCam}
             nvrs={nvrs}
+            camposUbicacion={['edificio', 'piso', 'area'].filter((c) => !filtroOculto('camaras', c))}
+            mostrarNvr={!filtroOculto('camaras', 'nvr')}
             extra={(
               <>
-                <div className="col-6 col-md-3">
-                  <label className="form-label fw-semibold">Marca</label>
-                  <select className="form-select" value={filtroCamMarca} onChange={(e) => setFiltroCamMarca(e.target.value)}>
-                    <option value="">Todas las marcas</option>
-                    {marcasDisponibles.map((m) => <option key={m} value={m}>{m}</option>)}
-                    <option value={SIN_MARCA}>Sin marca</option>
-                  </select>
-                </div>
-                <div className="col-6 col-md-3">
-                  <label className="form-label fw-semibold">Estado</label>
-                  <select className="form-select" value={filtroCamEstado} onChange={(e) => setFiltroCamEstado(e.target.value)}>
-                    <option value="">Todos los estados</option>
-                    {ESTADOS.map((e) => <option key={e} value={e}>{ESTADO_LABEL[e]}</option>)}
-                  </select>
-                </div>
+                {!filtroOculto('camaras', 'marca') && (
+                  <div className="col-6 col-md-3">
+                    <label className="form-label fw-semibold">Marca</label>
+                    <select className="form-select" value={filtroCamMarca} onChange={(e) => setFiltroCamMarca(e.target.value)}>
+                      <option value="">Todas las marcas</option>
+                      {marcasDisponibles.map((m) => <option key={m} value={m}>{m}</option>)}
+                      <option value={SIN_MARCA}>Sin marca</option>
+                    </select>
+                  </div>
+                )}
+                {!filtroOculto('camaras', 'estado') && (
+                  <div className="col-6 col-md-3">
+                    <label className="form-label fw-semibold">Estado</label>
+                    <select className="form-select" value={filtroCamEstado} onChange={(e) => setFiltroCamEstado(e.target.value)}>
+                      <option value="">Todos los estados</option>
+                      {ESTADOS.map((e) => <option key={e} value={e}>{ESTADO_LABEL[e]}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div className="col-12 col-md-3">
                   <button className="btn btn-outline-secondary w-100" onClick={limpiarFiltrosCamaras} disabled={!hayFiltrosCamaras}>Limpiar filtros</button>
                 </div>
@@ -579,32 +441,42 @@ export default function Crud() {
               <table className="table table-hover align-middle mb-0">
                 <thead className="table-light">
                   <tr>
-                    <th>Hostname</th>
-                    <th role="button" onClick={toggleOrdenIp} style={{ cursor: 'pointer', userSelect: 'none' }}>
-                      IP {ordenIp === 'asc' ? '▲' : ordenIp === 'desc' ? '▼' : ''}
-                    </th>
-                    <th>Edificio</th><th>Piso</th><th>Área</th><th>Marca</th><th>Estado</th><th>NVR</th><th></th>
+                    {!colOculta('camaras', 'hostname') && <th>Hostname</th>}
+                    {!colOculta('camaras', 'ip') && (
+                      <th role="button" onClick={toggleOrdenIp} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                        IP {ordenIp === 'asc' ? '▲' : ordenIp === 'desc' ? '▼' : ''}
+                      </th>
+                    )}
+                    {!colOculta('camaras', 'edificio') && <th>Edificio</th>}
+                    {!colOculta('camaras', 'piso') && <th>Piso</th>}
+                    {!colOculta('camaras', 'area') && <th>Area</th>}
+                    {!colOculta('camaras', 'marca') && <th>Marca</th>}
+                    {!colOculta('camaras', 'estado') && <th>Estado</th>}
+                    {!colOculta('camaras', 'nvr') && <th>NVR</th>}
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {camarasOrdenadas.map((c) => (
                     <tr key={c.id} role="button" onClick={() => setDetalleCamara(c)} style={{ cursor: 'pointer' }}>
-                      <td>{c.hostname}</td>
-                      <td>{c.ip || '—'}</td>
-                      <td>{c.edificio}</td>
-                      <td>{c.piso}</td>
-                      <td>{c.area}</td>
-                      <td>{c.marca || '—'}</td>
-                      <td><span className={`badge ${ESTADO_BADGE[c.estado] || 'text-bg-secondary'}`}>{ESTADO_LABEL[c.estado] || c.estado}</span></td>
-                      <td>{c.nvr || '—'}</td>
+                      {!colOculta('camaras', 'hostname') && <td>{c.hostname}</td>}
+                      {!colOculta('camaras', 'ip') && <td>{c.ip || '—'}</td>}
+                      {!colOculta('camaras', 'edificio') && <td>{c.edificio}</td>}
+                      {!colOculta('camaras', 'piso') && <td>{c.piso}</td>}
+                      {!colOculta('camaras', 'area') && <td>{c.area}</td>}
+                      {!colOculta('camaras', 'marca') && <td>{c.marca || '—'}</td>}
+                      {!colOculta('camaras', 'estado') && (
+                        <td><span className={`badge ${ESTADO_BADGE[c.estado] || 'text-bg-secondary'}`}>{ESTADO_LABEL[c.estado] || c.estado}</span></td>
+                      )}
+                      {!colOculta('camaras', 'nvr') && <td>{c.nvr || '—'}</td>}
                       <td className="text-end">
-                        <button className="btn btn-sm btn-outline-secondary" onClick={(e) => { e.stopPropagation(); abrirModalCamara(c); }}>Editar</button>
+                        {puedeEditar && <button className="btn btn-sm btn-outline-secondary" onClick={(e) => { e.stopPropagation(); abrirModalCamara(c); }}>Editar</button>}
                       </td>
                     </tr>
                   ))}
                   {camarasFiltradas.length === 0 && (
                     <tr><td colSpan={9} className="text-body-secondary">
-                      {camaras.length === 0 ? 'Todavía no hay cámaras cargadas' : 'Ninguna cámara coincide con la búsqueda/filtros'}
+                      {camaras.length === 0 ? 'Todavia no hay camaras cargadas' : 'Ninguna camara coincide con la busqueda/filtros'}
                     </td></tr>
                   )}
                 </tbody>
@@ -616,7 +488,7 @@ export default function Crud() {
                 <div className="card camera-card shadow-sm" key={c.id} role="button" onClick={() => setDetalleCamara(c)}>
                   <div className="camera-thumb">
                     {c.imagen_url ? (
-                      <img src={c.imagen_url} alt={c.hostname} />
+                      <img src={urlFoto(c.imagen_url)} alt={c.hostname} />
                     ) : (
                       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                         <rect x="3" y="7" width="15" height="12" rx="2" /><path d="M18 10l4-2v10l-4-2" />
@@ -637,7 +509,7 @@ export default function Crud() {
               ))}
               {camarasFiltradas.length === 0 && (
                 <p className="text-body-secondary mb-0">
-                  {camaras.length === 0 ? 'Todavía no hay cámaras cargadas' : 'Ninguna cámara coincide con la búsqueda/filtros'}
+                  {camaras.length === 0 ? 'Todavia no hay camaras cargadas' : 'Ninguna camara coincide con la busqueda/filtros'}
                 </p>
               )}
             </div>
@@ -649,7 +521,7 @@ export default function Crud() {
         <div className="card shadow-sm">
           <div className="card-header d-flex justify-content-between align-items-center">
             <span className="fw-semibold">NVR <span className="text-body-secondary fw-normal">({nvrsFiltrados.length} de {nvrs.length})</span></span>
-            <button className="btn btn-primary btn-sm" onClick={() => abrirModalNvr()}>+ Agregar</button>
+            {puedeEditar && <button className="btn btn-primary btn-sm" onClick={() => abrirModalNvr()}>+ Agregar</button>}
           </div>
           <FiltrosCrud
             busqueda={busquedaNvrs}
@@ -658,30 +530,40 @@ export default function Crud() {
             filtro={filtroNvrTab}
             onFiltro={setFiltroNvrTab}
             nvrs={nvrs}
+            camposUbicacion={filtroOculto('nvrs', 'edificio') ? [] : ['edificio']}
+            mostrarNvr={!filtroOculto('nvrs', 'nvr')}
           />
           <div className="table-responsive">
             <table className="table table-hover align-middle mb-0">
               <thead className="table-light">
-                <tr><th>Hostname</th><th>IP</th><th>MAC</th><th>Edificio</th><th>Piso</th><th>Cámaras</th><th></th></tr>
+                <tr>
+                  {!colOculta('nvrs', 'hostname') && <th>Hostname</th>}
+                  {!colOculta('nvrs', 'ip') && <th>IP</th>}
+                  {!colOculta('nvrs', 'mac') && <th>MAC</th>}
+                  {!colOculta('nvrs', 'edificio') && <th>Edificio</th>}
+                  {!colOculta('nvrs', 'piso') && <th>Piso</th>}
+                  {!colOculta('nvrs', 'camaras') && <th>Camaras</th>}
+                  <th></th>
+                </tr>
               </thead>
               <tbody>
                 {nvrsFiltrados.map((n) => (
                   <tr key={n.id}>
-                    <td>{n.hostname}</td>
-                    <td>{n.ip || '—'}</td>
-                    <td>{n.mac_address || '—'}</td>
-                    <td>{n.edificio || '—'}</td>
-                    <td>{n.piso || '—'}</td>
-                    <td><span className="badge text-bg-secondary">{n.cantidad_camaras}</span></td>
+                    {!colOculta('nvrs', 'hostname') && <td>{n.hostname}</td>}
+                    {!colOculta('nvrs', 'ip') && <td>{n.ip || '—'}</td>}
+                    {!colOculta('nvrs', 'mac') && <td>{n.mac_address || '—'}</td>}
+                    {!colOculta('nvrs', 'edificio') && <td>{n.edificio || '—'}</td>}
+                    {!colOculta('nvrs', 'piso') && <td>{n.piso || '—'}</td>}
+                    {!colOculta('nvrs', 'camaras') && <td><span className="badge text-bg-secondary">{n.cantidad_camaras}</span></td>}
                     <td className="text-end">
-                      <button className="btn btn-sm btn-outline-secondary me-2" onClick={() => abrirModalNvr(n)}>Editar</button>
+                      {puedeEditar && <button className="btn btn-sm btn-outline-secondary me-2" onClick={() => abrirModalNvr(n)}>Editar</button>}
                       {puedeBorrar && <button className="btn btn-sm btn-outline-danger" onClick={() => borrar('nvr', n.id)}>Borrar</button>}
                     </td>
                   </tr>
                 ))}
                 {nvrsFiltrados.length === 0 && (
                   <tr><td colSpan={7} className="text-body-secondary">
-                    {nvrs.length === 0 ? 'Todavía no hay NVRs cargados' : 'Ningún NVR coincide con la búsqueda'}
+                    {nvrs.length === 0 ? 'Todavia no hay NVRs cargados' : 'Ningun NVR coincide con la busqueda'}
                   </td></tr>
                 )}
               </tbody>
@@ -703,18 +585,25 @@ export default function Crud() {
             filtro={filtroEdifTab}
             onFiltro={setFiltroEdifTab}
             nvrs={nvrs}
+            camposUbicacion={[]}
+            mostrarNvr={false}
           />
           <div className="table-responsive">
             <table className="table table-hover align-middle mb-0">
               <thead className="table-light">
-                <tr><th>Nombre</th><th>Cámaras</th><th>NVRs</th><th></th></tr>
+                <tr>
+                  {!colOculta('edificios', 'nombre') && <th>Nombre</th>}
+                  {!colOculta('edificios', 'camaras') && <th>Camaras</th>}
+                  {!colOculta('edificios', 'nvrs') && <th>NVRs</th>}
+                  <th></th>
+                </tr>
               </thead>
               <tbody>
                 {edificiosFiltrados.map((ed) => (
                   <tr key={ed.id}>
-                    <td>{ed.nombre}</td>
-                    <td><span className="badge text-bg-secondary">{ed.cantidad_camaras}</span></td>
-                    <td><span className="badge text-bg-secondary">{ed.cantidad_nvrs}</span></td>
+                    {!colOculta('edificios', 'nombre') && <td>{ed.nombre}</td>}
+                    {!colOculta('edificios', 'camaras') && <td><span className="badge text-bg-secondary">{ed.cantidad_camaras}</span></td>}
+                    {!colOculta('edificios', 'nvrs') && <td><span className="badge text-bg-secondary">{ed.cantidad_nvrs}</span></td>}
                     <td className="text-end">
                       <button className="btn btn-sm btn-outline-secondary me-2" onClick={() => abrirModalEdificio(ed)}>Editar</button>
                       {puedeBorrar && <button className="btn btn-sm btn-outline-danger" onClick={() => borrar('edificio', ed.id)}>Borrar</button>}
@@ -723,7 +612,7 @@ export default function Crud() {
                 ))}
                 {edificiosFiltrados.length === 0 && (
                   <tr><td colSpan={4} className="text-body-secondary">
-                    {edificios.length === 0 ? 'Todavía no hay edificios cargados' : 'Ningún edificio coincide con la búsqueda'}
+                    {edificios.length === 0 ? 'Todavia no hay edificios cargados' : 'Ningun edificio coincide con la busqueda'}
                   </td></tr>
                 )}
               </tbody>
@@ -745,18 +634,25 @@ export default function Crud() {
             filtro={filtroPisoTab}
             onFiltro={setFiltroPisoTab}
             nvrs={nvrs}
+            camposUbicacion={[]}
+            mostrarNvr={false}
           />
           <div className="table-responsive">
             <table className="table table-hover align-middle mb-0">
               <thead className="table-light">
-                <tr><th>Nombre</th><th>Cámaras</th><th>NVRs</th><th></th></tr>
+                <tr>
+                  {!colOculta('pisos', 'nombre') && <th>Nombre</th>}
+                  {!colOculta('pisos', 'camaras') && <th>Camaras</th>}
+                  {!colOculta('pisos', 'nvrs') && <th>NVRs</th>}
+                  <th></th>
+                </tr>
               </thead>
               <tbody>
                 {pisosFiltrados.map((p) => (
                   <tr key={p.id}>
-                    <td>{p.nombre}</td>
-                    <td><span className="badge text-bg-secondary">{p.cantidad_camaras}</span></td>
-                    <td><span className="badge text-bg-secondary">{p.cantidad_nvrs}</span></td>
+                    {!colOculta('pisos', 'nombre') && <td>{p.nombre}</td>}
+                    {!colOculta('pisos', 'camaras') && <td><span className="badge text-bg-secondary">{p.cantidad_camaras}</span></td>}
+                    {!colOculta('pisos', 'nvrs') && <td><span className="badge text-bg-secondary">{p.cantidad_nvrs}</span></td>}
                     <td className="text-end">
                       <button className="btn btn-sm btn-outline-secondary me-2" onClick={() => abrirModalPiso(p)}>Editar</button>
                       {puedeBorrar && <button className="btn btn-sm btn-outline-danger" onClick={() => borrar('piso', p.id)}>Borrar</button>}
@@ -765,7 +661,7 @@ export default function Crud() {
                 ))}
                 {pisosFiltrados.length === 0 && (
                   <tr><td colSpan={4} className="text-body-secondary">
-                    {pisos.length === 0 ? 'Todavía no hay pisos cargados' : 'Ningún piso coincide con la búsqueda'}
+                    {pisos.length === 0 ? 'Todavia no hay pisos cargados' : 'Ningun piso coincide con la busqueda'}
                   </td></tr>
                 )}
               </tbody>
@@ -777,23 +673,27 @@ export default function Crud() {
       {tab === 'areas' && (
         <div className="card shadow-sm">
           <div className="card-header d-flex justify-content-between align-items-center">
-            <span className="fw-semibold">Áreas <span className="text-body-secondary fw-normal">({areasFiltradas.length} de {areas.length})</span></span>
+            <span className="fw-semibold">Areas <span className="text-body-secondary fw-normal">({areasFiltradas.length} de {areas.length})</span></span>
             <button className="btn btn-primary btn-sm" onClick={() => abrirModalArea()}>+ Agregar</button>
           </div>
           <div className="card-body border-bottom">
             <label className="form-label fw-semibold">Buscar</label>
-            <input className="form-control" placeholder="Nombre del área..." value={busquedaAreas} onChange={(e) => setBusquedaAreas(e.target.value)} />
+            <input className="form-control" placeholder="Nombre del area..." value={busquedaAreas} onChange={(e) => setBusquedaAreas(e.target.value)} />
           </div>
           <div className="table-responsive">
             <table className="table table-hover align-middle mb-0">
               <thead className="table-light">
-                <tr><th>Nombre</th><th>Cámaras</th><th></th></tr>
+                <tr>
+                  {!colOculta('areas', 'nombre') && <th>Nombre</th>}
+                  {!colOculta('areas', 'camaras') && <th>Camaras</th>}
+                  <th></th>
+                </tr>
               </thead>
               <tbody>
                 {areasFiltradas.map((a) => (
                   <tr key={a.id}>
-                    <td>{a.nombre}</td>
-                    <td><span className="badge text-bg-secondary">{a.cantidad_camaras}</span></td>
+                    {!colOculta('areas', 'nombre') && <td>{a.nombre}</td>}
+                    {!colOculta('areas', 'camaras') && <td><span className="badge text-bg-secondary">{a.cantidad_camaras}</span></td>}
                     <td className="text-end">
                       <button className="btn btn-sm btn-outline-secondary me-2" onClick={() => abrirModalArea(a)}>Editar</button>
                       {puedeBorrar && <button className="btn btn-sm btn-outline-danger" onClick={() => borrar('area', a.id)}>Borrar</button>}
@@ -802,7 +702,7 @@ export default function Crud() {
                 ))}
                 {areasFiltradas.length === 0 && (
                   <tr><td colSpan={3} className="text-body-secondary">
-                    {areas.length === 0 ? 'Todavía no hay áreas cargadas' : 'Ninguna área coincide con la búsqueda'}
+                    {areas.length === 0 ? 'Todavia no hay areas cargadas' : 'Ninguna area coincide con la busqueda'}
                   </td></tr>
                 )}
               </tbody>
@@ -826,7 +726,7 @@ export default function Crud() {
                   <div className="modal-body">
                     {modal.tipo === 'camara' && (
                       <>
-                        <h3 className="h6 fw-semibold mb-2">Ubicación</h3>
+                        <h3 className="h6 fw-semibold mb-2">Ubicacion</h3>
                         <UbicacionSelector
                           edificioId={modal.edificio_id || null}
                           pisoId={modal.piso_id || null}
@@ -837,7 +737,7 @@ export default function Crud() {
 
                         <div className="row g-3 mt-1">
                           <div className="col-12">
-                            <label className="form-label">Descripción</label>
+                            <label className="form-label">Descripcion</label>
                             <input className="form-control" value={modal.descripcion} onChange={(e) => setModal((m) => ({ ...m, descripcion: e.target.value }))} />
                           </div>
                           <div className="col-12">
@@ -853,11 +753,11 @@ export default function Crud() {
                             <input className="form-control" value={modal.modelo} onChange={(e) => setModal((m) => ({ ...m, modelo: e.target.value }))} />
                           </div>
                           <div className="col-12 col-md-6">
-                            <label className="form-label">Dirección IP</label>
+                            <label className="form-label">Direccion IP</label>
                             <input className="form-control" value={modal.ip} onChange={(e) => setModal((m) => ({ ...m, ip: e.target.value }))} />
                           </div>
                           <div className="col-12 col-md-6">
-                            <label className="form-label">Dirección MAC</label>
+                            <label className="form-label">Direccion MAC</label>
                             <input className="form-control" value={modal.mac_address} onChange={(e) => setModal((m) => ({ ...m, mac_address: e.target.value }))} />
                           </div>
                           <div className="col-12">
@@ -869,7 +769,7 @@ export default function Crud() {
                             <input className="form-control" value={modal.usuario} onChange={(e) => setModal((m) => ({ ...m, usuario: e.target.value }))} autoComplete="off" />
                           </div>
                           <div className="col-12 col-md-6">
-                            <label className="form-label">Contraseña</label>
+                            <label className="form-label">Contrasena</label>
                             <input className="form-control" value={modal.contrasena} onChange={(e) => setModal((m) => ({ ...m, contrasena: e.target.value }))} autoComplete="off" />
                           </div>
                           <div className="col-12 col-md-6">
@@ -890,7 +790,7 @@ export default function Crud() {
                         <h3 className="h6 fw-semibold mb-2 mt-4">Imagen</h3>
                         {modal.imagenActual && (
                           <div className="d-flex align-items-center gap-2 mb-2">
-                            <img src={modal.imagenActual} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 6 }} />
+                            <img src={urlFoto(modal.imagenActual)} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 6 }} />
                             <button
                               type="button"
                               className="btn btn-sm btn-outline-danger"
@@ -1016,41 +916,39 @@ export default function Crud() {
                 <div className="modal-body">
                   <div className="camera-thumb camera-thumb-lg mb-3">
                     {detalleCamara.imagen_url ? (
-                      <img src={detalleCamara.imagen_url} alt={detalleCamara.hostname} />
+                      <img src={urlFoto(detalleCamara.imagen_url)} alt={detalleCamara.hostname} />
                     ) : (
                       <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                         <rect x="3" y="7" width="15" height="12" rx="2" /><path d="M18 10l4-2v10l-4-2" />
                       </svg>
                     )}
-                    <span className={`badge ${ESTADO_BADGE[detalleCamara.estado] || 'text-bg-secondary'} camera-estado-badge`}>
-                      {ESTADO_LABEL[detalleCamara.estado] || detalleCamara.estado}
-                    </span>
+                    {!colOculta('camaras', 'estado') && (
+                      <span className={`badge ${ESTADO_BADGE[detalleCamara.estado] || 'text-bg-secondary'} camera-estado-badge`}>
+                        {ESTADO_LABEL[detalleCamara.estado] || detalleCamara.estado}
+                      </span>
+                    )}
                   </div>
 
                   <dl className="mb-0" style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', columnGap: '1.5rem', rowGap: '0.5rem' }}>
-                    <dt className="text-body-secondary fw-normal text-nowrap">Edificio</dt>
-                    <dd className="mb-0">{detalleCamara.edificio}</dd>
-                    <dt className="text-body-secondary fw-normal text-nowrap">Piso</dt>
-                    <dd className="mb-0">{detalleCamara.piso}</dd>
-                    <dt className="text-body-secondary fw-normal text-nowrap">Área</dt>
-                    <dd className="mb-0">{detalleCamara.area}</dd>
-                    {detalleCamara.ubicacion && (<><dt className="text-body-secondary fw-normal text-nowrap">Ubicación</dt><dd className="mb-0">{detalleCamara.ubicacion}</dd></>)}
-                    {detalleCamara.descripcion && (<><dt className="text-body-secondary fw-normal text-nowrap">Descripción</dt><dd className="mb-0">{detalleCamara.descripcion}</dd></>)}
-                    {detalleCamara.marca && (<><dt className="text-body-secondary fw-normal text-nowrap">Marca</dt><dd className="mb-0">{detalleCamara.marca}</dd></>)}
+                    {!colOculta('camaras', 'edificio') && (<><dt className="text-body-secondary fw-normal text-nowrap">Edificio</dt><dd className="mb-0">{detalleCamara.edificio}</dd></>)}
+                    {!colOculta('camaras', 'piso') && (<><dt className="text-body-secondary fw-normal text-nowrap">Piso</dt><dd className="mb-0">{detalleCamara.piso}</dd></>)}
+                    {!colOculta('camaras', 'area') && (<><dt className="text-body-secondary fw-normal text-nowrap">Area</dt><dd className="mb-0">{detalleCamara.area}</dd></>)}
+                    {detalleCamara.ubicacion && (<><dt className="text-body-secondary fw-normal text-nowrap">Ubicacion</dt><dd className="mb-0">{detalleCamara.ubicacion}</dd></>)}
+                    {!colOculta('camaras', 'descripcion') && detalleCamara.descripcion && (<><dt className="text-body-secondary fw-normal text-nowrap">Descripcion</dt><dd className="mb-0">{detalleCamara.descripcion}</dd></>)}
+                    {!colOculta('camaras', 'marca') && detalleCamara.marca && (<><dt className="text-body-secondary fw-normal text-nowrap">Marca</dt><dd className="mb-0">{detalleCamara.marca}</dd></>)}
                     {detalleCamara.modelo && (<><dt className="text-body-secondary fw-normal text-nowrap">Modelo</dt><dd className="mb-0">{detalleCamara.modelo}</dd></>)}
-                    {detalleCamara.ip && (<><dt className="text-body-secondary fw-normal text-nowrap">IP</dt><dd className="mb-0">{detalleCamara.ip}</dd></>)}
-                    {detalleCamara.mac_address && (<><dt className="text-body-secondary fw-normal text-nowrap">MAC</dt><dd className="mb-0">{detalleCamara.mac_address}</dd></>)}
+                    {!colOculta('camaras', 'ip') && detalleCamara.ip && (<><dt className="text-body-secondary fw-normal text-nowrap">IP</dt><dd className="mb-0">{detalleCamara.ip}</dd></>)}
+                    {!colOculta('camaras', 'mac') && detalleCamara.mac_address && (<><dt className="text-body-secondary fw-normal text-nowrap">MAC</dt><dd className="mb-0">{detalleCamara.mac_address}</dd></>)}
                     {detalleCamara.switch_conectado && (<><dt className="text-body-secondary fw-normal text-nowrap">Switch</dt><dd className="mb-0">{detalleCamara.switch_conectado}</dd></>)}
-                    {detalleCamara.usuario && (<><dt className="text-body-secondary fw-normal text-nowrap">Usuario</dt><dd className="mb-0">{detalleCamara.usuario}</dd></>)}
-                    {detalleCamara.contrasena && (<><dt className="text-body-secondary fw-normal text-nowrap">Contraseña</dt><dd className="mb-0">{detalleCamara.contrasena}</dd></>)}
-                    <dt className="text-body-secondary fw-normal text-nowrap">NVR</dt>
-                    <dd className="mb-0">{detalleCamara.nvr || '—'}</dd>
+                    {!colOculta('camaras', 'usuario') && detalleCamara.usuario && (<><dt className="text-body-secondary fw-normal text-nowrap">Usuario</dt><dd className="mb-0">{detalleCamara.usuario}</dd></>)}
+                    {!colOculta('camaras', 'contrasena') && detalleCamara.contrasena && (<><dt className="text-body-secondary fw-normal text-nowrap">Contrasena</dt><dd className="mb-0">{detalleCamara.contrasena}</dd></>)}
+                    {!colOculta('camaras', 'nvr') && (<><dt className="text-body-secondary fw-normal text-nowrap">NVR</dt><dd className="mb-0">{detalleCamara.nvr || '—'}</dd></>)}
                     {detalleCamara.observaciones && (<><dt className="text-body-secondary fw-normal text-nowrap">Observaciones</dt><dd className="mb-0">{detalleCamara.observaciones}</dd></>)}
                   </dl>
                 </div>
                 <div className="modal-footer">
                   <button type="button" className="btn btn-outline-secondary" onClick={() => setDetalleCamara(null)}>Cerrar</button>
-                  <button type="button" className="btn btn-primary" onClick={() => { const c = detalleCamara; setDetalleCamara(null); abrirModalCamara(c); }}>Editar</button>
+                  {puedeEditar && <button type="button" className="btn btn-primary" onClick={() => { const c = detalleCamara; setDetalleCamara(null); abrirModalCamara(c); }}>Editar</button>}
                 </div>
               </div>
             </div>
@@ -1059,55 +957,6 @@ export default function Crud() {
         </>
       )}
 
-      {nvrDetalle && (
-        <>
-          <div
-            className="modal d-block"
-            tabIndex="-1"
-            role="dialog"
-            onClick={(e) => { if (e.target === e.currentTarget) setNvrDetalle(null); }}
-          >
-            <div className="modal-dialog modal-dialog-centered" role="document">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h2 className="modal-title h5">{nvrDetalle.hostname}</h2>
-                  <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setNvrDetalle(null)} />
-                </div>
-                <div className="modal-body">
-                  <div className="mb-3">
-                    <span className="text-body-secondary">Cámaras totales: </span>
-                    <span className="fw-semibold">{camarasDelNvrDetalle.length}</span>
-                  </div>
-                  {porMarcaDelNvrDetalle.map(({ marca, cantidad }) => (
-                    <div key={marca} className="mb-2">
-                      <div className="d-flex justify-content-between small mb-1">
-                        <span>{marca}</span>
-                        <span className="text-body-secondary">{cantidad}</span>
-                      </div>
-                      <div className="progress" role="progressbar" aria-label={marca} aria-valuenow={cantidad} aria-valuemin={0} aria-valuemax={maxPorMarcaDelNvrDetalle} style={{ height: 8 }}>
-                        <div className="progress-bar" style={{ width: `${(cantidad / maxPorMarcaDelNvrDetalle) * 100}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                  {porMarcaDelNvrDetalle.length === 0 && <p className="text-body-secondary mb-0">Este NVR todavía no tiene cámaras asignadas</p>}
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-outline-secondary" onClick={() => setNvrDetalle(null)}>Cerrar</button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={camarasDelNvrDetalle.length === 0}
-                    onClick={() => { const id = nvrDetalle.id; setNvrDetalle(null); irACamarasFiltradas({ cam: { nvrId: id === 'sin' ? 'sin' : String(id) } }); }}
-                  >
-                    Ver cámaras
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="modal-backdrop show" />
-        </>
-      )}
     </Layout>
   );
 }

@@ -5,8 +5,8 @@ const requireRole = require('../middleware/requireRole');
 
 const router = express.Router();
 
-// Un NVR agrupa muchas cámaras (RF-04): cantidad_camaras se calcula al
-// vuelo acá, no se guarda como columna, para que nunca quede desactualizada.
+// Un NVR agrupa muchas camaras (RF-04): cantidad_camaras se calcula al
+// vuelo aca, no se guarda como columna, para que nunca quede desactualizada.
 const SELECT_BASE = `
   SELECT n.*, e.nombre AS edificio, p.nombre AS piso,
     (SELECT COUNT(*) FROM camaras c WHERE c.nvr_id = n.id) AS cantidad_camaras
@@ -20,7 +20,7 @@ router.get('/', auth, (req, res) => {
   res.json(db.prepare(`${SELECT_BASE} ORDER BY n.hostname`).all());
 });
 
-// GET /api/nvrs/:id — incluye el detalle de las cámaras asociadas
+// GET /api/nvrs/:id — incluye el detalle de las camaras asociadas
 router.get('/:id', auth, (req, res) => {
   const nvr = db.prepare(`${SELECT_BASE} WHERE n.id = ?`).get(req.params.id);
   if (!nvr) return res.status(404).json({ error: 'NVR no encontrado' });
@@ -85,7 +85,7 @@ router.put('/:id', auth, requireRole('admin', 'avanzado'), (req, res) => {
   res.json(db.prepare(`${SELECT_BASE} WHERE n.id = ?`).get(req.params.id));
 });
 
-// DELETE /api/nvrs/:id — Admin. Bloqueado si tiene cámaras asociadas (para no
+// DELETE /api/nvrs/:id — Admin. Bloqueado si tiene camaras asociadas (para no
 // desvincularlas en silencio; ver mismo criterio en ubicaciones.js).
 router.delete('/:id', auth, requireRole('admin'), (req, res) => {
   const { id } = req.params;
@@ -95,7 +95,7 @@ router.delete('/:id', auth, requireRole('admin'), (req, res) => {
 
   const { camaras } = db.prepare('SELECT COUNT(*) AS camaras FROM camaras WHERE nvr_id = ?').get(id);
   if (camaras > 0) {
-    return res.status(409).json({ error: `No se puede borrar: tiene ${camaras} cámara(s) asociada(s).` });
+    return res.status(409).json({ error: `No se puede borrar: tiene ${camaras} camara(s) asociada(s).` });
   }
 
   db.prepare('DELETE FROM nvrs WHERE id = ?').run(id);

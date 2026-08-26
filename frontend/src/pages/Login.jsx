@@ -5,17 +5,20 @@ import { useAuth } from '../context/AuthContext';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 export default function Login() {
-  const { loginWithGoogle, loginDev, solicitarCodigo, verificarCodigo } = useAuth();
+  const { loginWithGoogle, solicitarCodigo, verificarCodigo, loginWithPassword } = useAuth();
   const navigate = useNavigate();
   const googleBtnRef = useRef(null);
   const [error, setError] = useState('');
-  const [devEmail, setDevEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
   const [email, setEmail] = useState('');
   const [codigo, setCodigo] = useState('');
   const [codigoEnviado, setCodigoEnviado] = useState(false);
   const [avisoCodigo, setAvisoCodigo] = useState('');
+
+  const [modoPassword, setModoPassword] = useState(true);
+  const [usuario, setUsuario] = useState('');
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return;
@@ -33,7 +36,7 @@ export default function Login() {
             await loginWithGoogle(response.credential);
             navigate('/');
           } catch (err) {
-            setError(err.response?.data?.error || 'Error al iniciar sesión con Google');
+            setError(err.response?.data?.error || 'Error al iniciar sesion con Google');
           } finally {
             setLoading(false);
           }
@@ -55,9 +58,9 @@ export default function Login() {
     try {
       await solicitarCodigo(email);
       setCodigoEnviado(true);
-      setAvisoCodigo('Te mandamos un código a tu email institucional. Vence en 10 minutos.');
+      setAvisoCodigo('Te mandamos un codigo a tu email institucional. Vence en 10 minutos.');
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo enviar el código');
+      setError(err.response?.data?.error || 'No se pudo enviar el codigo');
     } finally {
       setLoading(false);
     }
@@ -71,25 +74,21 @@ export default function Login() {
       await verificarCodigo(email, codigo);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.error || 'Código inválido');
+      setError(err.response?.data?.error || 'Codigo invalido');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDevLogin = async (e) => {
+  const handleLoginPassword = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await loginDev(devEmail);
+      await loginWithPassword(usuario, password);
       navigate('/');
     } catch (err) {
-      if (err.response?.status === 404) {
-        setError('El login de desarrollo no está disponible en este entorno.');
-      } else {
-        setError(err.response?.data?.error || 'Error al iniciar sesión');
-      }
+      setError(err.response?.data?.error || 'Error al iniciar sesion');
     } finally {
       setLoading(false);
     }
@@ -101,8 +100,8 @@ export default function Login() {
         <div className="card-body p-4">
           <div className="text-center mb-4">
             <span className="badge bg-primary fs-6 mb-3 px-3 py-2">CURF</span>
-            <h1 className="h4 fw-bold mb-1">Panel de Accesos a Cámaras</h1>
-            <p className="text-muted small mb-0">Ingresá con tu cuenta institucional</p>
+            <h1 className="h4 fw-bold mb-1">Panel de Accesos a Camaras</h1>
+            <p className="text-muted small mb-0">Ingresa con tu cuenta institucional</p>
           </div>
 
           {GOOGLE_CLIENT_ID && (
@@ -120,7 +119,45 @@ export default function Login() {
             </div>
           )}
 
-          {!codigoEnviado ? (
+          {modoPassword ? (
+            <form onSubmit={handleLoginPassword} className={GOOGLE_CLIENT_ID ? 'mt-4 pt-3 border-top' : 'mt-3'}>
+              <div className="mb-3">
+                <label className="form-label small fw-semibold">Usuario</label>
+                <input
+                  type="text"
+                  value={usuario}
+                  onChange={(e) => setUsuario(e.target.value)}
+                  placeholder="llimpitay"
+                  className="form-control"
+                  required
+                  autoFocus
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label small fw-semibold">Contrasena</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="form-control"
+                  required
+                  autoComplete="current-password"
+                />
+              </div>
+              <button type="submit" className="btn btn-primary w-100" disabled={loading}>
+                {loading ? 'Ingresando...' : 'Ingresar'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-link btn-sm w-100 mt-1"
+                onClick={() => { setModoPassword(false); setUsuario(''); setPassword(''); setError(''); }}
+              >
+                Usar codigo por email en su lugar
+              </button>
+            </form>
+          ) : !codigoEnviado ? (
             <form onSubmit={handleSolicitarCodigo} className={GOOGLE_CLIENT_ID ? 'mt-4 pt-3 border-top' : 'mt-3'}>
               <div className="mb-3">
                 <label className="form-label small fw-semibold">Email institucional</label>
@@ -135,13 +172,20 @@ export default function Login() {
                 />
               </div>
               <button type="submit" className="btn btn-primary w-100" disabled={loading}>
-                {loading ? 'Enviando...' : 'Enviarme un código'}
+                {loading ? 'Enviando...' : 'Enviarme un codigo'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-link btn-sm w-100 mt-1"
+                onClick={() => { setModoPassword(true); setError(''); setAvisoCodigo(''); }}
+              >
+                Ingresar con contrasena
               </button>
             </form>
           ) : (
             <form onSubmit={handleVerificarCodigo} className="mt-4 pt-3 border-top">
               <div className="mb-3">
-                <label className="form-label small fw-semibold">Código recibido en {email}</label>
+                <label className="form-label small fw-semibold">Codigo recibido en {email}</label>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -161,27 +205,10 @@ export default function Login() {
                 className="btn btn-link btn-sm w-100 mt-1"
                 onClick={() => { setCodigoEnviado(false); setCodigo(''); setError(''); setAvisoCodigo(''); }}
               >
-                Usar otro email / pedir un código nuevo
+                Usar otro email / pedir un codigo nuevo
               </button>
             </form>
           )}
-
-          <form onSubmit={handleDevLogin} className="mt-4 pt-3 border-top">
-            <div className="mb-3">
-              <label className="form-label small fw-semibold">Login de desarrollo (email de un usuario ya cargado)</label>
-              <input
-                type="email"
-                value={devEmail}
-                onChange={(e) => setDevEmail(e.target.value)}
-                placeholder="usuario@curf.ucc.edu.ar"
-                className="form-control"
-                required
-              />
-            </div>
-            <button type="submit" className="btn btn-primary w-100" disabled={loading}>
-              {loading ? 'Ingresando...' : 'Ingresar (desarrollo)'}
-            </button>
-          </form>
         </div>
       </div>
     </div>

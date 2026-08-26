@@ -20,10 +20,10 @@ const CAMARAS_DE_SOLICITUD = `
   ORDER BY e.nombre, p.nombre, a.nombre, c.hostname
 `;
 
-// Los datos de conexión (IP/usuario/contraseña) solo tienen sentido una vez
+// Los datos de conexion (IP/usuario/contrasena) solo tienen sentido una vez
 // que el mando medio ya tiene el acceso aprobado — para RF-08 (nunca antes:
 // mismo criterio que en camaras.js, "el mando medio nunca recibe IP/MAC" se
-// aplica hasta que efectivamente le corresponde poder entrar). Dirección/
+// aplica hasta que efectivamente le corresponde poder entrar). Direccion/
 // Admin/Sistemas-lectura los ven siempre (ya tienen acceso completo al
 // inventario en otras pantallas).
 function conCamaras(solicitud, incluirConexion) {
@@ -35,23 +35,23 @@ function conCamaras(solicitud, incluirConexion) {
 }
 
 // POST /api/solicitudes — RF-10/RF-11/RF-12 (mando_medio): pide acceso a una
-// o varias cámaras de una sola vez. A diferencia de un modelo por ítem, acá
-// la solicitud se aprueba o rechaza como un todo (RF-13) — así quedó definida
+// o varias camaras de una sola vez. A diferencia de un modelo por item, aca
+// la solicitud se aprueba o rechaza como un todo (RF-13) — asi quedo definida
 // en el diagrama de datos: el estado vive en la cabecera `solicitudes`, y
 // `solicitud_camaras` es una tabla puente sin estado propio.
 router.post('/', auth, requireRole('mando_medio'), (req, res) => {
   const { camara_ids, comentario } = req.body;
 
   if (!Array.isArray(camara_ids) || camara_ids.length === 0) {
-    return res.status(400).json({ error: 'camara_ids debe ser un array con al menos una cámara' });
+    return res.status(400).json({ error: 'camara_ids debe ser un array con al menos una camara' });
   }
 
   const crear = db.transaction(() => {
     const placeholders = camara_ids.map(() => '?').join(',');
 
     // RF-12: no duplicar una solicitud pendiente ni pedir algo que ya se tiene
-    // activo. `usuario_id` no vive en solicitud_camaras, así que esto se
-    // valida acá (no hay forma de expresarlo como constraint de esta tabla).
+    // activo. `usuario_id` no vive en solicitud_camaras, asi que esto se
+    // valida aca (no hay forma de expresarlo como constraint de esta tabla).
     const conflictoPendiente = db.prepare(
       `SELECT sc.camara_id FROM solicitud_camaras sc
        JOIN solicitudes s ON s.id = sc.solicitud_id
@@ -80,14 +80,14 @@ router.post('/', auth, requireRole('mando_medio'), (req, res) => {
 
   if (crear.conflicto) {
     return res.status(409).json({
-      error: 'Ya tenés una solicitud pendiente o un acceso activo para alguna de estas cámaras',
+      error: 'Ya tenes una solicitud pendiente o un acceso activo para alguna de estas camaras',
       camara_ids: crear.camara_ids,
     });
   }
 
   const solicitudConCamaras = conCamaras(crear.solicitud, false);
 
-  // RF-24: nueva solicitud → notifica a Dirección y a destinatarios fijos.
+  // RF-24: nueva solicitud → notifica a Direccion y a destinatarios fijos.
   notificar('nueva_solicitud', { solicitud: solicitudConCamaras, solicitante: req.user });
 
   res.status(201).json(solicitudConCamaras);
@@ -101,11 +101,11 @@ router.get('/mias', auth, requireRole('mando_medio'), (req, res) => {
   res.json(solicitudes.map((s) => conCamaras(s, s.estado === 'aprobada')));
 });
 
-// GET /api/solicitudes — RF-13/RF-19 (Dirección, Admin, Sistemas-lectura):
+// GET /api/solicitudes — RF-13/RF-19 (Direccion, Admin, Sistemas-lectura):
 // ?estado=pendiente filtra; sin filtro trae todo (historial completo).
 router.get('/', auth, requireRole('direccion', 'admin', 'avanzado', 'sistemas_lectura'), (req, res) => {
   const { estado } = req.query;
-  const base = `SELECT s.*, u.nombre AS solicitante_nombre, u.email_institucional AS solicitante_email
+  const base = `SELECT s.*, u.nombre AS solicitante_nombre, u.username AS solicitante_email
                 FROM solicitudes s JOIN usuarios u ON u.id = s.usuario_id`;
 
   const filas = estado
@@ -116,8 +116,8 @@ router.get('/', auth, requireRole('direccion', 'admin', 'avanzado', 'sistemas_le
 });
 
 // Devuelve { ok:false } si la solicitud no existe o ya fue resuelta (evita
-// doble resolución concurrente: el UPDATE con WHERE estado='pendiente' es
-// atómico dentro de la transacción synchronous de better-sqlite3).
+// doble resolucion concurrente: el UPDATE con WHERE estado='pendiente' es
+// atomico dentro de la transaccion synchronous de better-sqlite3).
 function resolverSolicitud(solicitudId, estado, resueltoPor) {
   const actualizada = db.prepare(
     `UPDATE solicitudes SET estado = ?, fecha_resolucion = datetime('now'), resuelto_por = ?
@@ -137,7 +137,7 @@ function resolverSolicitud(solicitudId, estado, resueltoPor) {
       const yaActivo = db.prepare(
         'SELECT id FROM accesos_otorgados WHERE usuario_id = ? AND camara_id = ? AND activo = 1'
       ).get(solicitud.usuario_id, camaraId);
-      if (yaActivo) continue; // ya tenía acceso activo por otra vía, no duplicar (RNF-07)
+      if (yaActivo) continue; // ya tenia acceso activo por otra via, no duplicar (RNF-07)
 
       const { lastInsertRowid } = db.prepare(
         'INSERT INTO accesos_otorgados (solicitud_id, usuario_id, camara_id, otorgado_por) VALUES (?, ?, ?, ?)'
@@ -149,9 +149,9 @@ function resolverSolicitud(solicitudId, estado, resueltoPor) {
   return { ok: true, solicitud: conCamaras(solicitud, true), accesos };
 }
 
-// PATCH /api/solicitudes/:id — RF-13/RF-14 (Dirección, Admin, Avanzado):
+// PATCH /api/solicitudes/:id — RF-13/RF-14 (Direccion, Admin, Avanzado):
 // aprueba o rechaza la solicitud completa. Si se aprueba, nace ya mismo un
-// acceso_otorgado por cada cámara incluida, con aplicado_en_hikcentral=0
+// acceso_otorgado por cada camara incluida, con aplicado_en_hikcentral=0
 // (queda pendiente de que Sistemas lo cargue en HikCentral — ver 4.5).
 router.patch('/:id', auth, requireRole('direccion', 'admin', 'avanzado'), (req, res) => {
   const { estado } = req.body;
@@ -164,7 +164,7 @@ router.patch('/:id', auth, requireRole('direccion', 'admin', 'avanzado'), (req, 
     return res.status(409).json({ error: 'La solicitud no existe o ya fue resuelta' });
   }
 
-  // RF-25: resolución de solicitud → notifica al solicitante, a Sistemas (si
+  // RF-25: resolucion de solicitud → notifica al solicitante, a Sistemas (si
   // fue aprobada, para que la aplique en HikCentral) y a destinatarios fijos.
   notificar('solicitud_resuelta', { solicitud: resultado.solicitud, resueltoPor: req.user });
 

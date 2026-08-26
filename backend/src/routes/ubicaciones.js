@@ -5,15 +5,15 @@ const requireRole = require('../middleware/requireRole');
 
 const router = express.Router();
 
-// Ubicación de cámaras (RF-04/RF-07): edificio, piso y área son tres
-// catálogos globales independientes (ver 009_areas_globales.sql y
+// Ubicacion de camaras (RF-04/RF-07): edificio, piso y area son tres
+// catalogos globales independientes (ver 009_areas_globales.sql y
 // 011_pisos_globales.sql) — un piso como "3er Piso" no pertenece a un
-// edificio puntual, así que se eligen como tres selects sueltos, no en
-// cascada. Lectura abierta a cualquier rol autenticado (la necesita también
-// la vista del mando medio para mostrar ubicación); alta/edición/borrado
+// edificio puntual, asi que se eligen como tres selects sueltos, no en
+// cascada. Lectura abierta a cualquier rol autenticado (la necesita tambien
+// la vista del mando medio para mostrar ubicacion); alta/edicion/borrado
 // restringidos a Admin (ver panel CRUD en el frontend).
 
-// Traduce una violación de UNIQUE de SQLite a un 409 legible; cualquier otro
+// Traduce una violacion de UNIQUE de SQLite a un 409 legible; cualquier otro
 // error se relanza para que lo capture el manejador global (500).
 function siEsConflictoUnico(res, err, mensaje) {
   if (/UNIQUE constraint failed/.test(err.message)) {
@@ -61,7 +61,7 @@ router.put('/edificios/:id', auth, requireRole('admin', 'avanzado'), (req, res) 
   res.json(db.prepare('SELECT * FROM edificios WHERE id = ?').get(req.params.id));
 });
 
-// DELETE /api/ubicaciones/edificios/:id — Admin. Bloqueado si tiene cámaras
+// DELETE /api/ubicaciones/edificios/:id — Admin. Bloqueado si tiene camaras
 // o NVRs asociados.
 router.delete('/edificios/:id', auth, requireRole('admin'), (req, res) => {
   const { id } = req.params;
@@ -72,14 +72,14 @@ router.delete('/edificios/:id', auth, requireRole('admin'), (req, res) => {
   const { camaras } = db.prepare('SELECT COUNT(*) AS camaras FROM camaras WHERE edificio_id = ?').get(id);
   const { nvrs } = db.prepare('SELECT COUNT(*) AS nvrs FROM nvrs WHERE edificio_id = ?').get(id);
   if (camaras > 0 || nvrs > 0) {
-    return res.status(409).json({ error: `No se puede borrar: tiene ${camaras} cámara(s) y ${nvrs} NVR(s) asociados.` });
+    return res.status(409).json({ error: `No se puede borrar: tiene ${camaras} camara(s) y ${nvrs} NVR(s) asociados.` });
   }
 
   db.prepare('DELETE FROM edificios WHERE id = ?').run(id);
   res.status(204).end();
 });
 
-// GET /api/ubicaciones/pisos — catálogo global (ver 011_pisos_globales.sql):
+// GET /api/ubicaciones/pisos — catalogo global (ver 011_pisos_globales.sql):
 // un piso no pertenece a un edificio puntual, la misma fila "3er Piso" vale
 // para cualquiera.
 router.get('/pisos', auth, (req, res) => {
@@ -92,7 +92,7 @@ router.get('/pisos', auth, (req, res) => {
 });
 
 // POST /api/ubicaciones/pisos — Admin. Piso global: una vez creado queda
-// disponible para elegir en la cámara de cualquier edificio.
+// disponible para elegir en la camara de cualquier edificio.
 router.post('/pisos', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { nombre } = req.body;
   if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
@@ -121,7 +121,7 @@ router.put('/pisos/:id', auth, requireRole('admin', 'avanzado'), (req, res) => {
   res.json(db.prepare('SELECT * FROM pisos WHERE id = ?').get(req.params.id));
 });
 
-// DELETE /api/ubicaciones/pisos/:id — Admin. Bloqueado si tiene cámaras o NVRs asociados.
+// DELETE /api/ubicaciones/pisos/:id — Admin. Bloqueado si tiene camaras o NVRs asociados.
 router.delete('/pisos/:id', auth, requireRole('admin'), (req, res) => {
   const { id } = req.params;
   if (!db.prepare('SELECT id FROM pisos WHERE id = ?').get(id)) {
@@ -131,15 +131,15 @@ router.delete('/pisos/:id', auth, requireRole('admin'), (req, res) => {
   const { camaras } = db.prepare('SELECT COUNT(*) AS camaras FROM camaras WHERE piso_id = ?').get(id);
   const { nvrs } = db.prepare('SELECT COUNT(*) AS nvrs FROM nvrs WHERE piso_id = ?').get(id);
   if (camaras > 0 || nvrs > 0) {
-    return res.status(409).json({ error: `No se puede borrar: tiene ${camaras} cámara(s) y ${nvrs} NVR(s) asociados.` });
+    return res.status(409).json({ error: `No se puede borrar: tiene ${camaras} camara(s) y ${nvrs} NVR(s) asociados.` });
   }
 
   db.prepare('DELETE FROM pisos WHERE id = ?').run(id);
   res.status(204).end();
 });
 
-// GET /api/ubicaciones/areas — catálogo global (RF-04): no depende de
-// edificio ni piso, la misma área vale para cualquiera.
+// GET /api/ubicaciones/areas — catalogo global (RF-04): no depende de
+// edificio ni piso, la misma area vale para cualquiera.
 router.get('/areas', auth, (req, res) => {
   res.json(db.prepare(`
     SELECT a.*, (SELECT COUNT(*) FROM camaras c WHERE c.area_id = a.id) AS cantidad_camaras
@@ -147,8 +147,8 @@ router.get('/areas', auth, (req, res) => {
   `).all());
 });
 
-// POST /api/ubicaciones/areas — Admin. Área global: una vez creada queda
-// disponible para elegir en la cámara de cualquier edificio y piso.
+// POST /api/ubicaciones/areas — Admin. Area global: una vez creada queda
+// disponible para elegir en la camara de cualquier edificio y piso.
 router.post('/areas', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { nombre } = req.body;
   if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
@@ -165,27 +165,27 @@ router.put('/areas/:id', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { nombre } = req.body;
   if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
   if (!db.prepare('SELECT id FROM areas WHERE id = ?').get(req.params.id)) {
-    return res.status(404).json({ error: 'Área no encontrada' });
+    return res.status(404).json({ error: 'Area no encontrada' });
   }
 
   try {
     db.prepare('UPDATE areas SET nombre = ? WHERE id = ?').run(nombre, req.params.id);
   } catch (err) {
-    if (siEsConflictoUnico(res, err, 'Ya existe un área con ese nombre')) return;
+    if (siEsConflictoUnico(res, err, 'Ya existe un area con ese nombre')) return;
   }
   res.json(db.prepare('SELECT * FROM areas WHERE id = ?').get(req.params.id));
 });
 
-// DELETE /api/ubicaciones/areas/:id — Admin. Bloqueado si alguna cámara la usa.
+// DELETE /api/ubicaciones/areas/:id — Admin. Bloqueado si alguna camara la usa.
 router.delete('/areas/:id', auth, requireRole('admin'), (req, res) => {
   const { id } = req.params;
   if (!db.prepare('SELECT id FROM areas WHERE id = ?').get(id)) {
-    return res.status(404).json({ error: 'Área no encontrada' });
+    return res.status(404).json({ error: 'Area no encontrada' });
   }
 
   const { camaras } = db.prepare('SELECT COUNT(*) AS camaras FROM camaras WHERE area_id = ?').get(id);
   if (camaras > 0) {
-    return res.status(409).json({ error: `No se puede borrar: la usan ${camaras} cámara(s).` });
+    return res.status(409).json({ error: `No se puede borrar: la usan ${camaras} camara(s).` });
   }
 
   db.prepare('DELETE FROM areas WHERE id = ?').run(id);

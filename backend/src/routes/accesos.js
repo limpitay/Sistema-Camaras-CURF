@@ -6,7 +6,7 @@ const requireRole = require('../middleware/requireRole');
 const router = express.Router();
 
 const SELECT_BASE = `
-  SELECT ao.*, u.nombre AS usuario_nombre, u.email_institucional,
+  SELECT ao.*, u.nombre AS usuario_nombre, u.username AS email_institucional,
          c.hostname, c.descripcion, e.nombre AS edificio, p.nombre AS piso, a.nombre AS area
   FROM accesos_otorgados ao
   JOIN usuarios u ON u.id = ao.usuario_id
@@ -21,7 +21,7 @@ function boolificar(row) {
 }
 
 // GET /api/accesos — RF-17/RF-18/RF-19: vigentes o historial, por usuario o
-// por cámara. Sin filtros trae todo (incluye revocados) para el historial completo.
+// por camara. Sin filtros trae todo (incluye revocados) para el historial completo.
 router.get('/', auth, requireRole('direccion', 'admin', 'avanzado', 'sistemas_lectura'), (req, res) => {
   const { usuario_id, camara_id, activo } = req.query;
   const condiciones = [];
@@ -49,7 +49,7 @@ router.get('/pendientes-hikcentral', auth, requireRole('admin', 'avanzado', 'sis
   res.json(filas.map(boolificar));
 });
 
-// PATCH /api/accesos/:id/revocar — RF-16 (Dirección)
+// PATCH /api/accesos/:id/revocar — RF-16 (Direccion)
 router.patch('/:id/revocar', auth, requireRole('direccion'), (req, res) => {
   const resultado = db.prepare(
     `UPDATE accesos_otorgados SET activo = 0, fecha_revocacion = datetime('now'), revocado_por = ?
@@ -67,13 +67,13 @@ router.patch('/:id/aplicar', auth, requireRole('admin', 'avanzado'), (req, res) 
     `UPDATE accesos_otorgados SET aplicado_en_hikcentral = 1, fecha_aplicado = datetime('now'), aplicado_por = ?
      WHERE id = ? AND activo = 1 AND aplicado_en_hikcentral = 0`
   ).run(req.user.id, req.params.id);
-  if (resultado.changes === 0) return res.status(409).json({ error: 'El acceso no existe o no está pendiente de aplicar' });
+  if (resultado.changes === 0) return res.status(409).json({ error: 'El acceso no existe o no esta pendiente de aplicar' });
 
   res.json(boolificar(db.prepare(`${SELECT_BASE} WHERE ao.id = ?`).get(req.params.id)));
 });
 
 // PATCH /api/accesos/:id/confirmar-baja — RF-22 (Admin): confirma que ya
-// removió el permiso de HikCentral tras una revocación. El registro vuelve al
+// removio el permiso de HikCentral tras una revocacion. El registro vuelve al
 // estado activo=0/aplicado=0 ("nada pendiente" — ver tabla de estados en
 // ESPECIFICACION.md 4.5).
 router.patch('/:id/confirmar-baja', auth, requireRole('admin', 'avanzado'), (req, res) => {
@@ -81,7 +81,7 @@ router.patch('/:id/confirmar-baja', auth, requireRole('admin', 'avanzado'), (req
     `UPDATE accesos_otorgados SET aplicado_en_hikcentral = 0, aplicado_por = ?
      WHERE id = ? AND activo = 0 AND aplicado_en_hikcentral = 1`
   ).run(req.user.id, req.params.id);
-  if (resultado.changes === 0) return res.status(409).json({ error: 'El acceso no existe o no está pendiente de baja' });
+  if (resultado.changes === 0) return res.status(409).json({ error: 'El acceso no existe o no esta pendiente de baja' });
 
   res.json(boolificar(db.prepare(`${SELECT_BASE} WHERE ao.id = ?`).get(req.params.id)));
 });

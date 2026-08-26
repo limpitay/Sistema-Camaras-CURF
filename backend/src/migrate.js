@@ -1,5 +1,5 @@
 // Runner de migraciones a medida: SQLite no tiene un equivalente directo a
-// node-pg-migrate, así que esto aplica los .sql de migrations/ en orden,
+// node-pg-migrate, asi que esto aplica los .sql de migrations/ en orden,
 // llevando registro de lo ya aplicado en _migrations. Son solo hacia adelante
 // (sin rollback) — para un panel interno de bajo volumen alcanza, y evita
 // sumar una dependencia extra solo para bajar migraciones.
@@ -26,10 +26,10 @@ for (const archivo of archivos) {
   const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, archivo), 'utf8');
 
   // PRAGMA foreign_keys=OFF no tiene efecto si se ejecuta dentro de una
-  // transacción ya abierta (la que arma db.transaction() más abajo) — es
-  // el único caso en que hace falta correr fuera de una transacción: cuando
+  // transaccion ya abierta (la que arma db.transaction() mas abajo) — es
+  // el unico caso en que hace falta correr fuera de una transaccion: cuando
   // hay que reconstruir una tabla que otras referencian por FK (SQLite no
-  // soporta ALTER de un CHECK existente). Ese tipo de migración marca esto
+  // soporta ALTER de un CHECK existente). Ese tipo de migracion marca esto
   // con un comentario al principio del archivo.
   if (sql.trimStart().startsWith('-- migrate:no-transaction')) {
     db.pragma('foreign_keys = OFF');
@@ -37,7 +37,7 @@ for (const archivo of archivos) {
     const rotas = db.pragma('foreign_key_check');
     if (rotas.length > 0) {
       db.pragma('foreign_keys = ON');
-      throw new Error(`${archivo} dejó referencias rotas: ${JSON.stringify(rotas)}`);
+      throw new Error(`${archivo} dejo referencias rotas: ${JSON.stringify(rotas)}`);
     }
     db.pragma('foreign_keys = ON');
     db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(archivo);
@@ -49,8 +49,8 @@ for (const archivo of archivos) {
     aplicarMigracion();
   }
 
-  console.log(`✅ Migración aplicada: ${archivo}`);
+  console.log(`✅ Migracion aplicada: ${archivo}`);
   aplicadas += 1;
 }
 
-console.log(aplicadas > 0 ? `Listo, ${aplicadas} migración(es) nueva(s).` : 'Sin migraciones pendientes.');
+console.log(aplicadas > 0 ? `Listo, ${aplicadas} migracion(es) nueva(s).` : 'Sin migraciones pendientes.');

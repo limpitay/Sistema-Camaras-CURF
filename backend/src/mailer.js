@@ -1,11 +1,11 @@
 const nodemailer = require('nodemailer');
 
-// Todavía no hay SMTP institucional armado (ver rama
+// Todavia no hay SMTP institucional armado (ver rama
 // feature/acceso-lan-login-institucional). Sin SMTP_HOST configurado, el
-// código se imprime en el log del contenedor en vez de mandarse por mail —
-// así se puede probar el flujo completo de login antes de tener el servidor
-// de correo real. Cuando SMTP_HOST esté seteado, esto empieza a mandar mails
-// de verdad sin tocar nada más del código.
+// codigo se imprime en el log del contenedor en vez de mandarse por mail —
+// asi se puede probar el flujo completo de login antes de tener el servidor
+// de correo real. Cuando SMTP_HOST este seteado, esto empieza a mandar mails
+// de verdad sin tocar nada mas del codigo.
 const transporter = process.env.SMTP_HOST
   ? nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -17,14 +17,14 @@ const transporter = process.env.SMTP_HOST
 
 async function enviarCodigoAcceso(email, codigo) {
   if (!transporter) {
-    console.log(`✉️  [SMTP no configurado] Código de acceso para ${email}: ${codigo}`);
+    console.log(`✉️  [SMTP no configurado] Codigo de acceso para ${email}: ${codigo}`);
     return;
   }
   await transporter.sendMail({
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
     to: email,
-    subject: 'Código de acceso — Panel de Cámaras CURF',
-    text: `Tu código de acceso es: ${codigo}\n\nVence en 10 minutos. Si no lo pediste vos, ignorá este mensaje.`,
+    subject: 'Codigo de acceso — Panel de Camaras CURF',
+    text: `Tu codigo de acceso es: ${codigo}\n\nVence en 10 minutos. Si no lo pediste vos, ignora este mensaje.`,
   });
 }
 

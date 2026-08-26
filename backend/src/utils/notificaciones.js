@@ -2,8 +2,8 @@ const db = require('../db');
 
 // RF-24/RF-25/RF-26: por ahora solo resuelve y loguea los destinatarios —
 // falta conectar un proveedor de SMTP real (pendiente junto con las
-// credenciales de Google OAuth, ver ESPECIFICACION.md sección 9). La firma
-// ya queda lista para que conectar el envío real no toque a quien la llama.
+// credenciales de Google OAuth, ver ESPECIFICACION.md seccion 9). La firma
+// ya queda lista para que conectar el envio real no toque a quien la llama.
 function destinatariosFijos() {
   return db.prepare('SELECT email FROM notificacion_destinatarios WHERE activo = 1').all().map((r) => r.email);
 }

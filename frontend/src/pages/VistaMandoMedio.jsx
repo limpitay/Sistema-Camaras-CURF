@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
-import client from '../api/client';
+import client, { urlFoto } from '../api/client';
 import Layout from '../components/Layout';
 import UbicacionSelector from '../components/UbicacionSelector';
 
 // RF-08/RF-09/RF-10: vista restringida — nunca recibe IP/MAC ni credenciales
-// (el backend ya filtra esos campos) y solo cámaras en estado "activa". El
-// modo selección arranca apagado (RF-10: elegir cámaras es una acción
+// (el backend ya filtra esos campos) y solo camaras en estado "activa". El
+// modo seleccion arranca apagado (RF-10: elegir camaras es una accion
 // deliberada, no el estado por defecto de la pantalla) — al activarlo
-// aparece el "+" para ir sumando cámaras, un contador flotante, y el botón
-// para abrir el modal de confirmación que dispara la solicitud real
-// (POST /solicitudes) — la misma que después ve Dirección en "Solicitudes".
+// aparece el "+" para ir sumando camaras, un contador flotante, y el boton
+// para abrir el modal de confirmacion que dispara la solicitud real
+// (POST /solicitudes) — la misma que despues ve Direccion en "Solicitudes".
 export default function VistaMandoMedio() {
   const [camaras, setCamaras] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -60,7 +60,7 @@ export default function VistaMandoMedio() {
       setSeleccionadas([]);
       setComentario('');
       setModoSeleccion(false);
-      setMensaje('Solicitud enviada. La vas a ver en "Mis solicitudes" y vas a recibir un aviso cuando Dirección la resuelva.');
+      setMensaje('Solicitud enviada. La vas a ver en "Mis solicitudes" y vas a recibir un aviso cuando Direccion la resuelva.');
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo enviar la solicitud');
     } finally {
@@ -74,11 +74,11 @@ export default function VistaMandoMedio() {
     <Layout>
       <div className="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-1">
         <div>
-          <h1 className="h4 fw-bold mb-1">Cámaras disponibles</h1>
-          <p className="text-body-secondary small mb-0">Ubicalas por edificio, piso, área, foto u observaciones.</p>
+          <h1 className="h4 fw-bold mb-1">Camaras disponibles</h1>
+          <p className="text-body-secondary small mb-0">Ubicalas por edificio, piso, area, foto u observaciones.</p>
         </div>
         <div className="d-flex align-items-center gap-2">
-          <span className="small text-body-secondary">Modo selección</span>
+          <span className="small text-body-secondary">Modo seleccion</span>
           <div className="form-check form-switch mb-0">
             <input
               className="form-check-input"
@@ -115,7 +115,7 @@ export default function VistaMandoMedio() {
                 >
                   <div className="position-relative">
                     {c.imagen_url ? (
-                      <img src={c.imagen_url} alt={c.descripcion || c.hostname} className="card-img-top" style={{ height: 140, objectFit: 'cover' }} />
+                      <img src={urlFoto(c.imagen_url)} alt={c.descripcion || c.hostname} className="card-img-top" style={{ height: 140, objectFit: 'cover' }} />
                     ) : (
                       <div className="d-flex align-items-center justify-content-center bg-body-tertiary" style={{ height: 140 }}>
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-body-secondary">
@@ -144,7 +144,7 @@ export default function VistaMandoMedio() {
               </div>
             );
           })}
-          {camaras.length === 0 && <p className="text-body-secondary">No hay cámaras activas disponibles.</p>}
+          {camaras.length === 0 && <p className="text-body-secondary">No hay camaras activas disponibles.</p>}
         </div>
       )}
 
@@ -154,7 +154,7 @@ export default function VistaMandoMedio() {
           style={{ zIndex: 1040 }}
         >
           <button className="btn btn-sm btn-link text-decoration-none" onClick={() => setSeleccionadas([])}>Limpiar</button>
-          <span className="small"><strong>{seleccionadas.length}</strong> cámara{seleccionadas.length === 1 ? '' : 's'} seleccionada{seleccionadas.length === 1 ? '' : 's'}</span>
+          <span className="small"><strong>{seleccionadas.length}</strong> camara{seleccionadas.length === 1 ? '' : 's'} seleccionada{seleccionadas.length === 1 ? '' : 's'}</span>
           <button className="btn btn-primary btn-sm fw-semibold" onClick={abrirModal}>SOLICITAR ACCESO</button>
         </div>
       )}
@@ -188,7 +188,7 @@ export default function VistaMandoMedio() {
                       </span>
                     ))}
                   </div>
-                  <label className="form-label small fw-semibold">Comentario para Dirección (opcional)</label>
+                  <label className="form-label small fw-semibold">Comentario para Direccion (opcional)</label>
                   <textarea
                     className="form-control"
                     rows={3}

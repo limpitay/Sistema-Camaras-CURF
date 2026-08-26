@@ -5,12 +5,12 @@ const requireRole = require('../middleware/requireRole');
 
 const router = express.Router();
 
-// Cuentas de NVR/HikCentral (vigilancia, sistemas, enfermeriaqx, etc.) y qué
-// cámaras puede ver cada una — reflejan lo que ya está configurado en el
+// Cuentas de NVR/HikCentral (vigilancia, sistemas, enfermeriaqx, etc.) y que
+// camaras puede ver cada una — reflejan lo que ya esta configurado en el
 // equipo real, no pasan por el flujo de solicitudes de este panel.
 
 const SELECT_CUENTA = `
-  SELECT c.*, u.nombre AS usuario_nombre, u.email_institucional AS usuario_email,
+  SELECT c.*, u.nombre AS usuario_nombre, u.username AS usuario_email,
     (SELECT COUNT(*) FROM accesos_nvr a WHERE a.cuenta_id = c.id) AS cantidad_camaras
   FROM cuentas_nvr c
   LEFT JOIN usuarios u ON u.id = c.usuario_id
@@ -21,7 +21,7 @@ router.get('/', auth, requireRole('admin', 'avanzado', 'sistemas_lectura'), (req
   res.json(db.prepare(`${SELECT_CUENTA} ORDER BY c.nombre`).all());
 });
 
-// GET /api/cuentas-nvr/:id — incluye el detalle de cámaras con permisos
+// GET /api/cuentas-nvr/:id — incluye el detalle de camaras con permisos
 router.get('/:id', auth, requireRole('admin', 'avanzado', 'sistemas_lectura'), (req, res) => {
   const cuenta = db.prepare(`${SELECT_CUENTA} WHERE c.id = ?`).get(req.params.id);
   if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada' });
@@ -29,12 +29,13 @@ router.get('/:id', auth, requireRole('admin', 'avanzado', 'sistemas_lectura'), (
   const camaras = db.prepare(`
     SELECT a.id AS acceso_id, a.grupo, a.en_vivo, a.reproduccion, a.estado AS acceso_estado,
       cam.id AS camara_id, cam.hostname, cam.descripcion, cam.observaciones, cam.imagen_url, cam.canal, cam.estado, cam.ip,
-      e.nombre AS edificio, p.nombre AS piso, ar.nombre AS area
+      e.nombre AS edificio, p.nombre AS piso, ar.nombre AS area, n.hostname AS nvr
     FROM accesos_nvr a
     JOIN camaras cam ON cam.id = a.camara_id
     JOIN edificios e ON e.id = cam.edificio_id
     JOIN pisos p ON p.id = cam.piso_id
     JOIN areas ar ON ar.id = cam.area_id
+    LEFT JOIN nvrs n ON n.id = cam.nvr_id
     WHERE a.cuenta_id = ?
     ORDER BY e.nombre, p.nombre, cam.hostname
   `).all(req.params.id);
@@ -93,9 +94,9 @@ router.delete('/:id', auth, requireRole('admin'), (req, res) => {
 });
 
 // POST /api/cuentas-nvr/:id/accesos — Admin. Otorga (o actualiza) el acceso
-// de esta cuenta a una cámara puntual. Un acceso nuevo arranca 'pendiente'
-// (es el borrador propio del sistema, todavía sin aplicar en el NVR/HikCentral
-// real); si ya existía, esta llamada solo actualiza grupo/en_vivo/reproduccion
+// de esta cuenta a una camara puntual. Un acceso nuevo arranca 'pendiente'
+// (es el borrador propio del sistema, todavia sin aplicar en el NVR/HikCentral
+// real); si ya existia, esta llamada solo actualiza grupo/en_vivo/reproduccion
 // y NO toca el estado pendiente/concedido.
 router.post('/:id/accesos', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const cuenta = db.prepare('SELECT id FROM cuentas_nvr WHERE id = ?').get(req.params.id);
@@ -116,15 +117,15 @@ router.post('/:id/accesos', auth, requireRole('admin', 'avanzado'), (req, res) =
 });
 
 // PATCH /api/cuentas-nvr/:id/accesos/:accesoId — Admin. Togglea en_vivo/reproduccion
-// y/o el estado pendiente/concedido (esto último es lo que se tilda a mano
-// después de aplicar el permiso en el NVR/HikCentral real).
+// y/o el estado pendiente/concedido (esto ultimo es lo que se tilda a mano
+// despues de aplicar el permiso en el NVR/HikCentral real).
 router.patch('/:id/accesos/:accesoId', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const acceso = db.prepare('SELECT * FROM accesos_nvr WHERE id = ? AND cuenta_id = ?').get(req.params.accesoId, req.params.id);
   if (!acceso) return res.status(404).json({ error: 'Acceso no encontrado' });
 
   const { en_vivo, reproduccion, estado } = req.body;
   if (estado !== undefined && !['pendiente', 'concedido'].includes(estado)) {
-    return res.status(400).json({ error: "estado inválido, debe ser 'pendiente' o 'concedido'" });
+    return res.status(400).json({ error: "estado invalido, debe ser 'pendiente' o 'concedido'" });
   }
   db.prepare('UPDATE accesos_nvr SET en_vivo = ?, reproduccion = ?, estado = ? WHERE id = ?').run(
     en_vivo === undefined ? acceso.en_vivo : (en_vivo ? 1 : 0),
@@ -135,7 +136,7 @@ router.patch('/:id/accesos/:accesoId', auth, requireRole('admin', 'avanzado'), (
   res.json({ ok: true });
 });
 
-// DELETE /api/cuentas-nvr/:id/accesos/:accesoId — Admin. Revoca el acceso a esa cámara.
+// DELETE /api/cuentas-nvr/:id/accesos/:accesoId — Admin. Revoca el acceso a esa camara.
 router.delete('/:id/accesos/:accesoId', auth, requireRole('admin'), (req, res) => {
   const resultado = db.prepare('DELETE FROM accesos_nvr WHERE id = ? AND cuenta_id = ?').run(req.params.accesoId, req.params.id);
   if (resultado.changes === 0) return res.status(404).json({ error: 'Acceso no encontrado' });

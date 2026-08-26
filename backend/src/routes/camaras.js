@@ -19,8 +19,8 @@ const SELECT_BASE = `
   LEFT JOIN nvrs n ON n.id = c.nvr_id
 `;
 
-// RF-08: el mando medio nunca recibe IP/MAC ni credenciales de la cámara —
-// se filtra acá, no en el frontend.
+// RF-08: el mando medio nunca recibe IP/MAC ni credenciales de la camara —
+// se filtra aca, no en el frontend.
 const CAMPOS_MANDO_MEDIO = ['id', 'hostname', 'descripcion', 'ubicacion', 'imagen_url', 'edificio', 'piso', 'area', 'observaciones', 'estado'];
 const CAMPOS_COMPLETOS = [
   ...CAMPOS_MANDO_MEDIO, 'edificio_id', 'piso_id', 'area_id', 'marca', 'modelo', 'ip', 'mac_address',
@@ -30,8 +30,8 @@ const CAMPOS_COMPLETOS = [
 function seleccionarCampos(row, rol, accesoSet) {
   const campos = rol === 'mando_medio' ? CAMPOS_MANDO_MEDIO : CAMPOS_COMPLETOS;
   const seleccionada = Object.fromEntries(campos.map((campo) => [campo, row[campo]]));
-  // RF-17: el mando medio ve si ya tiene un acceso activo a esta cámara,
-  // sin importar si Sistemas ya lo aplicó en HikCentral o no — es el mismo
+  // RF-17: el mando medio ve si ya tiene un acceso activo a esta camara,
+  // sin importar si Sistemas ya lo aplico en HikCentral o no — es el mismo
   // criterio "activo=1" que usa accesos_otorgados para lo vigente.
   if (rol === 'mando_medio') seleccionada.tiene_acceso = accesoSet.has(row.id);
   return seleccionada;
@@ -44,7 +44,7 @@ router.get('/', auth, (req, res) => {
   const valores = [];
 
   if (req.user.rol === 'mando_medio') {
-    // RF-09: solo cámaras activas son visibles/solicitables para mandos medios.
+    // RF-09: solo camaras activas son visibles/solicitables para mandos medios.
     condiciones.push("c.estado = 'activa'");
   } else if (estado) {
     valores.push(estado);
@@ -66,10 +66,10 @@ router.get('/', auth, (req, res) => {
 // GET /api/camaras/:id
 router.get('/:id', auth, (req, res) => {
   const row = db.prepare(`${SELECT_BASE} WHERE c.id = ?`).get(req.params.id);
-  if (!row) return res.status(404).json({ error: 'Cámara no encontrada' });
+  if (!row) return res.status(404).json({ error: 'Camara no encontrada' });
 
   if (req.user.rol === 'mando_medio' && row.estado !== 'activa') {
-    return res.status(404).json({ error: 'Cámara no encontrada' });
+    return res.status(404).json({ error: 'Camara no encontrada' });
   }
 
   const accesoSet = req.user.rol === 'mando_medio' ? obtenerAccesoSet(req.user.id) : null;
@@ -83,7 +83,7 @@ function obtenerAccesoSet(usuarioId) {
 
 // POST /api/camaras — RF-04 (Admin). Acepta JSON normal o multipart/form-data
 // con un archivo "imagen" (jpg/png, RF-06) — si viene el archivo, pisa
-// cualquier imagen_url que se haya mandado también.
+// cualquier imagen_url que se haya mandado tambien.
 router.post('/', auth, requireRole('admin', 'avanzado'), upload.single('imagen'), (req, res) => {
   const {
     hostname, descripcion, ubicacion, marca, modelo, ip, mac_address, edificio_id, piso_id, area_id,
@@ -100,7 +100,7 @@ router.post('/', auth, requireRole('admin', 'avanzado'), upload.single('imagen')
     return res.status(400).json({ error: 'hostname, edificio_id, piso_id y area_id son requeridos' });
   }
   if (estado && !ESTADOS.includes(estado)) {
-    return res.status(400).json({ error: `estado inválido, debe ser uno de: ${ESTADOS.join(', ')}` });
+    return res.status(400).json({ error: `estado invalido, debe ser uno de: ${ESTADOS.join(', ')}` });
   }
   if (!db.prepare('SELECT id FROM edificios WHERE id = ?').get(edificio_id)) {
     return res.status(400).json({ error: 'edificio_id no existe' });
@@ -135,7 +135,7 @@ router.post('/', auth, requireRole('admin', 'avanzado'), upload.single('imagen')
 // imagen_url a mano.
 router.put('/:id', auth, requireRole('admin', 'avanzado'), upload.single('imagen'), (req, res) => {
   const actual = db.prepare('SELECT * FROM camaras WHERE id = ?').get(req.params.id);
-  if (!actual) return res.status(404).json({ error: 'Cámara no encontrada' });
+  if (!actual) return res.status(404).json({ error: 'Camara no encontrada' });
 
   const {
     hostname, descripcion, ubicacion, marca, modelo, ip, mac_address, edificio_id, piso_id, area_id,
@@ -152,7 +152,7 @@ router.put('/:id', auth, requireRole('admin', 'avanzado'), upload.single('imagen
   const imagen_url = req.file ? `/api/uploads/camaras/${req.file.filename}` : req.body.imagen_url;
 
   if (estado && !ESTADOS.includes(estado)) {
-    return res.status(400).json({ error: `estado inválido, debe ser uno de: ${ESTADOS.join(', ')}` });
+    return res.status(400).json({ error: `estado invalido, debe ser uno de: ${ESTADOS.join(', ')}` });
   }
   if (edificio_id && !db.prepare('SELECT id FROM edificios WHERE id = ?').get(edificio_id)) {
     return res.status(400).json({ error: 'edificio_id no existe' });
@@ -199,15 +199,15 @@ router.put('/:id', auth, requireRole('admin', 'avanzado'), upload.single('imagen
 });
 
 // PATCH /api/camaras/:id/estado — RF-05: activar/desactivar es siempre un
-// UPDATE, nunca un DELETE (RNF-06). No hay ruta DELETE para cámaras a propósito.
+// UPDATE, nunca un DELETE (RNF-06). No hay ruta DELETE para camaras a proposito.
 router.patch('/:id/estado', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const { estado } = req.body;
   if (!ESTADOS.includes(estado)) {
-    return res.status(400).json({ error: `estado inválido, debe ser uno de: ${ESTADOS.join(', ')}` });
+    return res.status(400).json({ error: `estado invalido, debe ser uno de: ${ESTADOS.join(', ')}` });
   }
 
   const resultado = db.prepare('UPDATE camaras SET estado = ? WHERE id = ?').run(estado, req.params.id);
-  if (resultado.changes === 0) return res.status(404).json({ error: 'Cámara no encontrada' });
+  if (resultado.changes === 0) return res.status(404).json({ error: 'Camara no encontrada' });
 
   const actualizada = db.prepare(`${SELECT_BASE} WHERE c.id = ?`).get(req.params.id);
   res.json(seleccionarCampos(actualizada, 'admin'));

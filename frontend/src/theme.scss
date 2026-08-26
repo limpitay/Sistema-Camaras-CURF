@@ -1,15 +1,15 @@
-// Paleta y tipografía tomadas de https://curf.com.ar (Clínica Reina Fabiola):
+// Paleta y tipografia tomadas de https://curf.com.ar (Clinica Reina Fabiola):
 // --main-blue-color / --main-light-blue-color / --main-yellow-color en su CSS,
 // y Merriweather + Merriweather Sans como fuentes. Se recompila Bootstrap con
 // estas variables para que btn-primary, bg-primary, badges, etc. usen
 // directamente los colores institucionales, en vez de pisarlos con CSS aparte.
 //
 // El panel usa el modo oscuro nativo de Bootstrap (ver data-bs-theme="dark"
-// en index.html): fondo gris carbón, no negro puro, con texto casi blanco
+// en index.html): fondo gris carbon, no negro puro, con texto casi blanco
 // (~13:1 de contraste) — pensado para que el personal de mayor edad lo pueda
-// leer cómodo sin encandilarse. $primary se aclara respecto del azul
+// leer comodo sin encandilarse. $primary se aclara respecto del azul
 // institucional original (#002856) porque ese tono es casi ilegible como
-// fondo de botón sobre una página oscura.
+// fondo de boton sobre una pagina oscura.
 $primary: #1a5f96;
 $secondary: #2f7cc2;
 $warning: #e2b900;
@@ -21,7 +21,7 @@ $font-family-sans-serif: 'Merriweather Sans', system-ui, -apple-system, sans-ser
 $headings-font-family: 'Merriweather', Georgia, serif;
 $headings-font-weight: 700;
 
-// Texto y controles más grandes que el default de Bootstrap: mismo motivo,
+// Texto y controles mas grandes que el default de Bootstrap: mismo motivo,
 // facilitar la lectura a usuarios grandes de edad.
 $font-size-base: 1.05rem;
 $input-padding-y: 0.6rem;
@@ -38,16 +38,11 @@ body {
   min-height: 100vh;
 }
 
-.navbar-brand {
-  font-family: $headings-font-family;
-  font-weight: 700;
-}
-
 .card-title {
   font-family: $headings-font-family;
 }
 
-// Grilla de tarjetas del inventario de cámaras
+// Grilla de tarjetas del inventario de camaras
 .camera-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -89,9 +84,9 @@ body {
   cursor: default;
 }
 
-// El thumbnail chico usa "cover" (recorta para llenar el cuadrado), pero acá
+// El thumbnail chico usa "cover" (recorta para llenar el cuadrado), pero aca
 // en el modal de detalle importa ver la foto completa, no que quede prolija
-// — "contain" no recorta nunca, deja franjas vacías arriba/abajo si hace falta.
+// — "contain" no recorta nunca, deja franjas vacias arriba/abajo si hace falta.
 .camera-thumb-lg img {
   object-fit: contain;
 }
@@ -119,4 +114,218 @@ body {
 
 .dashboard-marca:hover {
   background-color: var(--bs-tertiary-bg) !important;
+}
+
+// Sidebar estilo GLPI (panel lateral navy oscuro, colapsable) — a pedido,
+// tomando el layout/paleta de ahi para la navegacion. El contenido sigue en
+// modo oscuro (ver header de este archivo, decision de accesibilidad para
+// personal de mayor edad): esto solo reemplaza la navbar superior de antes.
+$sidebar-width: 300px;
+$sidebar-bg: #111a2e;
+$sidebar-bg-hover: #1b2740;
+$sidebar-text: rgba(255, 255, 255, 0.82);
+$sidebar-text-muted: rgba(255, 255, 255, 0.5);
+$sidebar-border: rgba(255, 255, 255, 0.08);
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-sidebar {
+  width: $sidebar-width;
+  flex: 0 0 $sidebar-width;
+  background: $sidebar-bg;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.app-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1.1rem 1rem;
+  border-bottom: 1px solid $sidebar-border;
+  overflow: hidden;
+}
+
+.app-sidebar-brand-badge {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: $border-radius-sm;
+  background: var(--bs-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: $headings-font-family;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.app-sidebar-brand-text {
+  color: #fff;
+  font-family: $headings-font-family;
+  font-weight: 700;
+  font-size: 1.05rem;
+  white-space: nowrap;
+}
+
+.app-sidebar-nav {
+  flex: 1 1 auto;
+  padding: 0.75rem 0.6rem;
+}
+
+.app-sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.15rem;
+  border-radius: $border-radius-sm;
+  color: $sidebar-text;
+  text-decoration: none;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.app-sidebar-link:hover {
+  background: $sidebar-bg-hover;
+  color: #fff;
+}
+
+.app-sidebar-link.active {
+  background: var(--bs-primary);
+  color: #fff;
+}
+
+.app-sidebar-grupo {
+  cursor: pointer;
+}
+
+.app-sidebar-chevron {
+  flex: 0 0 auto;
+  display: flex;
+  transition: transform 0.15s;
+}
+
+.app-sidebar-chevron.abierto {
+  transform: rotate(180deg);
+}
+
+.app-sidebar-subnav {
+  padding: 0.15rem 0 0.4rem 2.6rem;
+}
+
+.app-sidebar-sublink {
+  display: block;
+  padding: 0.45rem 0.6rem;
+  margin-bottom: 0.1rem;
+  border-radius: $border-radius-sm;
+  color: $sidebar-text-muted;
+  text-decoration: none;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sidebar-sublink:hover {
+  background: $sidebar-bg-hover;
+  color: #fff;
+}
+
+.app-sidebar-sublink.active {
+  color: #fff;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.app-sidebar-icon {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-sidebar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sidebar-footer {
+  padding: 0.75rem 0.6rem;
+  border-top: 1px solid $sidebar-border;
+}
+
+.app-sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.75rem 0.75rem;
+  overflow: hidden;
+}
+
+.app-sidebar-avatar {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bs-warning);
+  color: #33260a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.app-sidebar-user-info {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  line-height: 1.2;
+}
+
+.app-sidebar-user-nombre {
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sidebar-user-rol {
+  color: $sidebar-text-muted;
+  font-size: 0.75rem;
+}
+
+.app-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+// Headers de tabla estilo GLPI: mayusculas, compactos, chicos — el resto de
+// .table (filas, hover, bordes) se deja como esta, ya funciona bien en modo
+// oscuro.
+.table > thead.table-light th,
+.table thead.table-light th {
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  font-weight: 700;
+  padding-top: 0.65rem;
+  padding-bottom: 0.65rem;
 }

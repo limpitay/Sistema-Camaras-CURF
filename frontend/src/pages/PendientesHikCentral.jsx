@@ -4,8 +4,8 @@ import client from '../api/client';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 
-// RF-16/RF-20/RF-21/RF-22: todo lo que Dirección ya aprobó/revocó pero
-// Sistemas todavía no replicó en HikCentral. Solo Admin/Avanzado pueden marcar acciones.
+// RF-16/RF-20/RF-21/RF-22: todo lo que Direccion ya aprobo/revoco pero
+// Sistemas todavia no replico en HikCentral. Solo Admin/Avanzado pueden marcar acciones.
 export default function PendientesHikCentral() {
   const { user } = useAuth();
   const puedeGestionar = user?.rol === 'admin' || user?.rol === 'avanzado';
@@ -19,9 +19,9 @@ export default function PendientesHikCentral() {
 
   useEffect(cargar, []);
 
-  // Agrupado por usuario (RF-20/RF-21): así se pueden tildar varias cámaras
+  // Agrupado por usuario (RF-20/RF-21): asi se pueden tildar varias camaras
   // de la misma persona y mandarlas juntas a Accesos NVR de una sola vez, en
-  // vez de repetir "Agregar en Accesos NVR" cámara por cámara.
+  // vez de repetir "Agregar en Accesos NVR" camara por camara.
   const grupos = [];
   const indicePorUsuario = new Map();
   for (const it of items) {
@@ -54,8 +54,8 @@ export default function PendientesHikCentral() {
     ));
   };
 
-  // Lleva las cámaras tildadas de este usuario a Accesos NVR para elegir ahí
-  // a qué cuenta NVR se les da el acceso — se aplican todas juntas en un
+  // Lleva las camaras tildadas de este usuario a Accesos NVR para elegir ahi
+  // a que cuenta NVR se les da el acceso — se aplican todas juntas en un
   // solo paso.
   const irAAccesosNvr = (altas) => {
     const elegidas = altas.filter((it) => seleccionadas.includes(it.id));
@@ -112,7 +112,7 @@ export default function PendientesHikCentral() {
                         />
                       </th>
                     )}
-                    <th>Hostname</th><th>Piso</th><th>Edificio</th><th>Área</th><th>Tipo</th><th>Fecha</th>{puedeGestionar && <th>Acción</th>}
+                    <th>Hostname</th><th>Piso</th><th>Edificio</th><th>Area</th><th>Tipo</th><th>Fecha</th>{puedeGestionar && <th>Accion</th>}
                   </tr>
                 </thead>
                 <tbody>

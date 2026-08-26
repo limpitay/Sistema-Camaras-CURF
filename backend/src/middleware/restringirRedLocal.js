@@ -1,6 +1,6 @@
 // RNF: el panel solo debe responder a pedidos que vengan de la LAN del
 // hospital. LAN_CIDR admite una lista separada por comas (varias VLANs); si
-// queda vacío, no restringe nada — así un .env de desarrollo sin esta
+// queda vacio, no restringe nada — asi un .env de desarrollo sin esta
 // variable sigue funcionando desde localhost sin config extra.
 function ipEnRango(ip, cidr) {
   const limpio = ip.replace(/^::ffff:/, '');

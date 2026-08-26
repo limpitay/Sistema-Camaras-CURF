@@ -30,7 +30,7 @@ export default function MisSolicitudes() {
                 <table className="table table-sm align-middle mb-0">
                   <thead>
                     <tr>
-                      <th>Cámara</th><th>Ubicación</th><th>IP</th><th>Usuario</th><th>Contraseña</th><th>NVR</th>
+                      <th>Camara</th><th>Ubicacion</th><th>IP</th><th>Usuario</th><th>Contrasena</th><th>NVR</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -47,7 +47,7 @@ export default function MisSolicitudes() {
                   </tbody>
                 </table>
                 <p className="text-body-secondary small mt-2 mb-0">
-                  Entrá con la IP, usuario y contraseña de cada cámara desde SmartPSS o el Client de HikCentral.
+                  Entra con la IP, usuario y contrasena de cada camara desde SmartPSS o el Client de HikCentral.
                 </p>
               </div>
             ) : (
@@ -69,7 +69,7 @@ export default function MisSolicitudes() {
         </div>
       ))}
 
-      {solicitudes.length === 0 && <p className="text-body-secondary">Todavía no hiciste ninguna solicitud.</p>}
+      {solicitudes.length === 0 && <p className="text-body-secondary">Todavia no hiciste ninguna solicitud.</p>}
     </Layout>
   );
 }

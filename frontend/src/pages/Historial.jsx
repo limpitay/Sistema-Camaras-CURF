@@ -3,7 +3,7 @@ import client from '../api/client';
 import Layout from '../components/Layout';
 
 // RF-17/RF-18/RF-19: accesos vigentes o historial completo, filtrable por
-// usuario o por cámara.
+// usuario o por camara.
 export default function Historial() {
   const [items, setItems] = useState([]);
   const [soloActivos, setSoloActivos] = useState(true);
@@ -33,7 +33,7 @@ export default function Historial() {
           <table className="table table-hover align-middle mb-0">
             <thead className="table-light">
               <tr>
-                <th>Email</th><th>Hostname</th><th>Descripción</th><th>Piso</th><th>Edificio</th>
+                <th>Email</th><th>Hostname</th><th>Descripcion</th><th>Piso</th><th>Edificio</th>
                 <th>Otorgado</th><th>Activo</th><th>Aplicado en HikCentral</th><th>Revocado</th>
               </tr>
             </thead>
@@ -48,12 +48,12 @@ export default function Historial() {
                   <td>{new Date(it.fecha_otorgado).toLocaleString()}</td>
                   <td>
                     <span className={`badge ${it.activo ? 'bg-success' : 'bg-body-secondary text-body'}`}>
-                      {it.activo ? 'Sí' : 'No'}
+                      {it.activo ? 'Si' : 'No'}
                     </span>
                   </td>
                   <td>
                     <span className={`badge ${it.aplicado_en_hikcentral ? 'bg-success' : 'bg-warning text-dark'}`}>
-                      {it.aplicado_en_hikcentral ? 'Sí' : 'No'}
+                      {it.aplicado_en_hikcentral ? 'Si' : 'No'}
                     </span>
                   </td>
                   <td>{it.fecha_revocacion ? new Date(it.fecha_revocacion).toLocaleString() : '—'}</td>

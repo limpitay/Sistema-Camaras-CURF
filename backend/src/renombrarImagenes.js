@@ -1,8 +1,8 @@
 // Script de un solo uso: aplica el criterio de nombre "hostname_ip" (ver
 // middleware/upload.js) a las fotos que ya estaban subidas antes de que ese
 // criterio existiera (hasta entonces se guardaban con un UUID). Es idempotente
-// — correrlo de nuevo sobre archivos ya renombrados no hace nada — así que es
-// seguro repetirlo si se agregan cámaras viejas sin foto renombrada.
+// — correrlo de nuevo sobre archivos ya renombrados no hace nada — asi que es
+// seguro repetirlo si se agregan camaras viejas sin foto renombrada.
 const fs = require('fs');
 const path = require('path');
 const db = require('./db');
@@ -22,7 +22,7 @@ for (const camara of camaras) {
   const rutaActual = path.join(UPLOADS_DIR, nombreActual);
 
   if (!fs.existsSync(rutaActual)) {
-    console.log(`⚠️  Cámara ${camara.id} (${camara.hostname}): falta el archivo ${nombreActual}, se omite.`);
+    console.log(`⚠️  Camara ${camara.id} (${camara.hostname}): falta el archivo ${nombreActual}, se omite.`);
     faltantes += 1;
     continue;
   }
@@ -36,7 +36,7 @@ for (const camara of camaras) {
 
   fs.renameSync(rutaActual, path.join(UPLOADS_DIR, nombreNuevo));
   db.prepare('UPDATE camaras SET imagen_url = ? WHERE id = ?').run(`${PREFIJO}${nombreNuevo}`, camara.id);
-  console.log(`✅ Cámara ${camara.id} (${camara.hostname}): ${nombreActual} → ${nombreNuevo}`);
+  console.log(`✅ Camara ${camara.id} (${camara.hostname}): ${nombreActual} → ${nombreNuevo}`);
   renombradas += 1;
 }
 
