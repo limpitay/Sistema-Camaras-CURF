@@ -127,12 +127,12 @@ export default function Login() {
                   type="text"
                   value={usuario}
                   onChange={(e) => setUsuario(e.target.value)}
-                  placeholder="llimpitay"
                   className="form-control"
                   required
                   autoFocus
                   autoCapitalize="off"
                   autoCorrect="off"
+                  autoComplete="off"
                 />
               </div>
               <div className="mb-3">
@@ -165,7 +165,6 @@ export default function Login() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="usuario@curf.ucc.edu.ar"
                   className="form-control"
                   required
                   autoFocus
@@ -191,7 +190,6 @@ export default function Login() {
                   inputMode="numeric"
                   value={codigo}
                   onChange={(e) => setCodigo(e.target.value)}
-                  placeholder="123456"
                   className="form-control"
                   required
                   autoFocus

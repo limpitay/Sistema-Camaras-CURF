@@ -183,7 +183,6 @@ export default function Usuarios() {
                         className="form-control"
                         value={modal.username}
                         onChange={(e) => setModal((m) => ({ ...m, username: e.target.value, usernameAuto: false }))}
-                        placeholder="llimpitay"
                         autoCapitalize="off"
                         autoCorrect="off"
                         required
