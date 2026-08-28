@@ -228,6 +228,9 @@ export default function Crud() {
     mac_address: fila?.mac_address ?? '',
     edificio_id: fila?.edificio_id ?? '',
     piso_id: fila?.piso_id ?? '',
+    marca: fila?.marca ?? '',
+    modelo: fila?.modelo ?? '',
+    canales_totales: fila?.canales_totales ?? '',
   });
   const abrirModalEdificio = (fila) => setModal({ tipo: 'edificio', id: fila?.id ?? null, nombre: fila?.nombre ?? '' });
   const abrirModalPiso = (fila) => setModal({ tipo: 'piso', id: fila?.id ?? null, nombre: fila?.nombre ?? '' });
@@ -271,6 +274,9 @@ export default function Crud() {
           mac_address: modal.mac_address.trim() || undefined,
           edificio_id: modal.edificio_id || undefined,
           piso_id: modal.piso_id || undefined,
+          marca: modal.marca.trim() || undefined,
+          modelo: modal.modelo.trim() || undefined,
+          canales_totales: modal.canales_totales || undefined,
         };
         if (modal.id) await client.put(`/nvrs/${modal.id}`, datos);
         else await client.post('/nvrs', datos);
@@ -534,15 +540,18 @@ export default function Crud() {
             mostrarNvr={!filtroOculto('nvrs', 'nvr')}
           />
           <div className="table-responsive">
-            <table className="table table-hover align-middle mb-0">
+            <table className="table table-hover align-middle mb-0 text-nowrap">
               <thead className="table-light">
                 <tr>
                   {!colOculta('nvrs', 'hostname') && <th>Hostname</th>}
                   {!colOculta('nvrs', 'ip') && <th>IP</th>}
-                  {!colOculta('nvrs', 'mac') && <th>MAC</th>}
                   {!colOculta('nvrs', 'edificio') && <th>Edificio</th>}
                   {!colOculta('nvrs', 'piso') && <th>Piso</th>}
-                  {!colOculta('nvrs', 'camaras') && <th>Camaras</th>}
+                  {!colOculta('nvrs', 'marca') && <th>Marca</th>}
+                  {!colOculta('nvrs', 'modelo') && <th>Modelo</th>}
+                  {!colOculta('nvrs', 'ocupados') && <th>Ocupados</th>}
+                  {!colOculta('nvrs', 'disponibles') && <th>Disponibles</th>}
+                  {!colOculta('nvrs', 'canales') && <th>Canales</th>}
                   <th></th>
                 </tr>
               </thead>
@@ -551,10 +560,21 @@ export default function Crud() {
                   <tr key={n.id}>
                     {!colOculta('nvrs', 'hostname') && <td>{n.hostname}</td>}
                     {!colOculta('nvrs', 'ip') && <td>{n.ip || '—'}</td>}
-                    {!colOculta('nvrs', 'mac') && <td>{n.mac_address || '—'}</td>}
                     {!colOculta('nvrs', 'edificio') && <td>{n.edificio || '—'}</td>}
                     {!colOculta('nvrs', 'piso') && <td>{n.piso || '—'}</td>}
-                    {!colOculta('nvrs', 'camaras') && <td><span className="badge text-bg-secondary">{n.cantidad_camaras}</span></td>}
+                    {!colOculta('nvrs', 'marca') && <td>{n.marca || '—'}</td>}
+                    {!colOculta('nvrs', 'modelo') && <td>{n.modelo || '—'}</td>}
+                    {!colOculta('nvrs', 'ocupados') && (
+                      <td><span className="badge text-bg-warning">{n.cantidad_camaras}</span></td>
+                    )}
+                    {!colOculta('nvrs', 'disponibles') && (
+                      <td>
+                        {n.canales_totales ? (
+                          <span className="badge text-bg-success">{n.canales_totales - n.cantidad_camaras}</span>
+                        ) : '—'}
+                      </td>
+                    )}
+                    {!colOculta('nvrs', 'canales') && <td>{n.canales_totales || '—'}</td>}
                     <td className="text-end">
                       {puedeEditar && <button className="btn btn-sm btn-outline-secondary me-2" onClick={() => abrirModalNvr(n)}>Editar</button>}
                       {puedeBorrar && <button className="btn btn-sm btn-outline-danger" onClick={() => borrar('nvr', n.id)}>Borrar</button>}
@@ -562,7 +582,7 @@ export default function Crud() {
                   </tr>
                 ))}
                 {nvrsFiltrados.length === 0 && (
-                  <tr><td colSpan={7} className="text-body-secondary">
+                  <tr><td colSpan={10} className="text-body-secondary">
                     {nvrs.length === 0 ? 'Todavia no hay NVRs cargados' : 'Ningun NVR coincide con la busqueda'}
                   </td></tr>
                 )}
@@ -837,6 +857,20 @@ export default function Crud() {
                         <div className="mb-3">
                           <label className="form-label">MAC</label>
                           <input className="form-control" value={modal.mac_address} onChange={(e) => setModal((m) => ({ ...m, mac_address: e.target.value }))} />
+                        </div>
+                        <div className="row g-3 mb-3">
+                          <div className="col-5">
+                            <label className="form-label">Marca</label>
+                            <input className="form-control" value={modal.marca} onChange={(e) => setModal((m) => ({ ...m, marca: e.target.value }))} />
+                          </div>
+                          <div className="col-5">
+                            <label className="form-label">Modelo</label>
+                            <input className="form-control" value={modal.modelo} onChange={(e) => setModal((m) => ({ ...m, modelo: e.target.value }))} />
+                          </div>
+                          <div className="col-2">
+                            <label className="form-label">Canales</label>
+                            <input type="number" min="1" className="form-control" value={modal.canales_totales} onChange={(e) => setModal((m) => ({ ...m, canales_totales: e.target.value }))} />
+                          </div>
                         </div>
                         <div className="row g-3">
                           <div className="col-6">

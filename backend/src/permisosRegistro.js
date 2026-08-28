@@ -53,7 +53,10 @@ const TABLAS_COLUMNAS = {
   },
   nvrs: {
     label: 'NVR',
-    columnas: { hostname: 'Hostname', ip: 'IP', mac: 'MAC', edificio: 'Edificio', piso: 'Piso', camaras: 'Camaras' },
+    columnas: {
+      hostname: 'Hostname', ip: 'IP', edificio: 'Edificio', piso: 'Piso',
+      marca: 'Marca', modelo: 'Modelo', ocupados: 'Ocupados', disponibles: 'Disponibles', canales: 'Canales',
+    },
   },
   edificios: {
     label: 'Edificios',

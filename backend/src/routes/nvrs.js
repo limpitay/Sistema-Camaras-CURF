@@ -34,7 +34,7 @@ router.get('/:id', auth, (req, res) => {
 
 // POST /api/nvrs — Admin/Avanzado
 router.post('/', auth, requireRole('admin', 'avanzado'), (req, res) => {
-  const { hostname, ip, mac_address, edificio_id, piso_id } = req.body;
+  const { hostname, ip, mac_address, edificio_id, piso_id, marca, modelo, canales_totales } = req.body;
   if (!hostname) return res.status(400).json({ error: 'hostname es requerido' });
   if (edificio_id && !db.prepare('SELECT id FROM edificios WHERE id = ?').get(edificio_id)) {
     return res.status(400).json({ error: 'edificio_id no existe' });
@@ -46,8 +46,8 @@ router.post('/', auth, requireRole('admin', 'avanzado'), (req, res) => {
   let lastInsertRowid;
   try {
     ({ lastInsertRowid } = db.prepare(
-      'INSERT INTO nvrs (hostname, ip, mac_address, edificio_id, piso_id) VALUES (?, ?, ?, ?, ?)'
-    ).run(hostname, ip || null, mac_address || null, edificio_id || null, piso_id || null));
+      'INSERT INTO nvrs (hostname, ip, mac_address, edificio_id, piso_id, marca, modelo, canales_totales) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(hostname, ip || null, mac_address || null, edificio_id || null, piso_id || null, marca || null, modelo || null, canales_totales || null));
   } catch (err) {
     if (/UNIQUE constraint failed/.test(err.message)) {
       return res.status(409).json({ error: 'Ya existe un NVR con ese hostname' });
@@ -63,7 +63,7 @@ router.put('/:id', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const actual = db.prepare('SELECT * FROM nvrs WHERE id = ?').get(req.params.id);
   if (!actual) return res.status(404).json({ error: 'NVR no encontrado' });
 
-  const { hostname, ip, mac_address, edificio_id, piso_id } = req.body;
+  const { hostname, ip, mac_address, edificio_id, piso_id, marca, modelo, canales_totales } = req.body;
   if (!hostname) return res.status(400).json({ error: 'hostname es requerido' });
   if (edificio_id && !db.prepare('SELECT id FROM edificios WHERE id = ?').get(edificio_id)) {
     return res.status(400).json({ error: 'edificio_id no existe' });
@@ -73,8 +73,8 @@ router.put('/:id', auth, requireRole('admin', 'avanzado'), (req, res) => {
   }
 
   try {
-    db.prepare('UPDATE nvrs SET hostname = ?, ip = ?, mac_address = ?, edificio_id = ?, piso_id = ? WHERE id = ?')
-      .run(hostname, ip || null, mac_address || null, edificio_id || null, piso_id || null, req.params.id);
+    db.prepare('UPDATE nvrs SET hostname = ?, ip = ?, mac_address = ?, edificio_id = ?, piso_id = ?, marca = ?, modelo = ?, canales_totales = ? WHERE id = ?')
+      .run(hostname, ip || null, mac_address || null, edificio_id || null, piso_id || null, marca || null, modelo || null, canales_totales || null, req.params.id);
   } catch (err) {
     if (/UNIQUE constraint failed/.test(err.message)) {
       return res.status(409).json({ error: 'Ya existe un NVR con ese hostname' });
