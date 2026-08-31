@@ -138,3 +138,63 @@ Ver sección 9 de [ESPECIFICACION.md](ESPECIFICACION.md): ubicación del servido
 - Falta conectar un SMTP real para que el código de login se mande por email de verdad (`SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`/`SMTP_FROM` en `.env` — mientras tanto el código queda en el log del backend).
 - Falta conectar un SMTP real en `backend/src/utils/notificaciones.js` (avisos de solicitudes — hoy solo loguea; es un canal aparte del mailer de login).
 - Confirmar el/los rango(s) de `LAN_CIDR` con todas las VLANs de clientes del hospital, no solo la de la PC donde se armó esto.
+
+## Chequeo de salud del stack en producción
+
+Script automatizado (`scripts/chequeo-servicios.sh`) — corre todos los chequeos de abajo de una: contenedores `Up`, API/frontend respondiendo por HTTP de verdad, puertos escuchando, espacio en disco, y que `camaras.db` no sea la versión vacía que se autogenera si el stack se levanta antes de restaurar `backend/data` (ver "Migrar a otra máquina" arriba):
+
+```bash
+cd /opt/Sistema-Camaras-CURF
+git pull
+chmod +x scripts/chequeo-servicios.sh
+./scripts/chequeo-servicios.sh
+```
+
+Los mismos chequeos a mano, si preferís ir paso a paso:
+
+1. **Contenedores corriendo y hace cuánto**
+   ```bash
+   docker compose -f /opt/Sistema-Camaras-CURF/docker-compose.yml ps
+   ```
+   Buscá que ambos (`sistema-camaras-api`, `sistema-camaras-frontend`) digan `Up` en la columna STATUS, no `Restarting` ni `Exited`.
+
+2. **Docker en general (motor y uso de recursos)**
+   ```bash
+   systemctl is-active docker
+   docker stats --no-stream
+   ```
+
+3. **Últimos logs de cada contenedor (buscar errores)**
+   ```bash
+   docker logs sistema-camaras-api --tail 50
+   docker logs sistema-camaras-frontend --tail 50
+   ```
+
+4. **Que la API responda de verdad (no solo que el contenedor esté "Up")**
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3088/api/auth/login
+   ```
+   Un 400/403/405 está bien (significa que respondió, solo rechazó el método/body); lo que importa es que no tire error de conexión.
+
+5. **Que el frontend/nginx responda**
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8088/
+   ```
+   Esperás un `200`.
+
+6. **Puertos escuchando**
+   ```bash
+   ss -tlnp | grep -E '3088|8088'
+   ```
+
+7. **Espacio en disco** (la base y las fotos viven en `backend/data`)
+   ```bash
+   df -h /
+   du -sh /opt/Sistema-Camaras-CURF/backend/data
+   ```
+
+8. **Que la base esté con los datos reales (no la vacía de antes)**
+   ```bash
+   ls -la /opt/Sistema-Camaras-CURF/backend/data/camaras.db
+   ```
+   Debería pesar bastante más que ~204.800 bytes (esa es la base vacía recién migrada) y no tener la fecha de cuando se creó el contenedor por primera vez.
