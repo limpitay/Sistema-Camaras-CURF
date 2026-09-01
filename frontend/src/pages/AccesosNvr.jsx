@@ -278,31 +278,78 @@ export default function AccesosNvr() {
   // --- Accesos a camaras: alta / edicion / baja ---
   const idsConAcceso = new Set((detalle?.camaras || []).map((c) => c.camara_id));
   const camarasParaElegir = camaras.filter((c) => c.id === modalAcceso?.camara_id || !idsConAcceso.has(c.id));
+  const edificiosModal = [...new Set(camarasParaElegir.map((c) => c.edificio).filter(Boolean))].sort();
+  const pisosModal = [...new Set(camarasParaElegir.map((c) => c.piso).filter(Boolean))].sort();
+  const areasModal = [...new Set(camarasParaElegir.map((c) => c.area).filter(Boolean))].sort();
   const camarasFiltradasModal = camarasParaElegir.filter((c) => {
+    if (modalAcceso?.filtroEdificio && c.edificio !== modalAcceso.filtroEdificio) return false;
+    if (modalAcceso?.filtroPiso && c.piso !== modalAcceso.filtroPiso) return false;
+    if (modalAcceso?.filtroArea && c.area !== modalAcceso.filtroArea) return false;
     if (!busquedaCamaraModal.trim()) return true;
     const q = busquedaCamaraModal.trim().toLowerCase();
     return [c.hostname, c.descripcion, c.ip, c.edificio, c.area].some((v) => (v || '').toLowerCase().includes(q));
   });
+  const seleccionarTodasVisibles = () => setModalAcceso((m) => ({
+    ...m,
+    camara_ids: [...new Set([...m.camara_ids, ...camarasFiltradasModal.map((c) => c.id)])],
+  }));
 
-  const abrirNuevoAcceso = () => { setError(''); setBusquedaCamaraModal(''); setModalAcceso({ accesoId: null, camara_id: '', grupo: '', en_vivo: true, reproduccion: true }); };
+  const abrirNuevoAcceso = () => {
+    setError('');
+    setBusquedaCamaraModal('');
+    setModalAcceso({
+      accesoId: null, camara_ids: [], grupo: '', en_vivo: true, reproduccion: true,
+      filtroEdificio: '', filtroPiso: '', filtroArea: '',
+    });
+  };
   const abrirEditarAcceso = (c) => {
     setError('');
     setBusquedaCamaraModal('');
     setModalAcceso({ accesoId: c.acceso_id, camara_id: c.camara_id, grupo: c.grupo || '', en_vivo: c.en_vivo, reproduccion: c.reproduccion, nombre: c.descripcion || c.hostname });
   };
 
+  const toggleCamaraSeleccionada = (id) => setModalAcceso((m) => ({
+    ...m,
+    camara_ids: m.camara_ids.includes(id) ? m.camara_ids.filter((x) => x !== id) : [...m.camara_ids, id],
+  }));
+
   const guardarAcceso = async (e) => {
     e.preventDefault();
-    if (!modalAcceso.camara_id) { setError('Elegi una camara.'); return; }
+    if (modalAcceso.accesoId) {
+      setError('');
+      setGuardando(true);
+      try {
+        await client.post(`/cuentas-nvr/${cuentaId}/accesos`, {
+          camara_id: modalAcceso.camara_id,
+          grupo: modalAcceso.grupo.trim() || undefined,
+          en_vivo: modalAcceso.en_vivo,
+          reproduccion: modalAcceso.reproduccion,
+        });
+        setModalAcceso(null);
+        await cargarDetalle();
+        await cargarCuentas();
+      } catch (err) {
+        setError(err.response?.data?.error || 'No se pudo guardar el acceso');
+      } finally {
+        setGuardando(false);
+      }
+      return;
+    }
+
+    if (modalAcceso.camara_ids.length === 0) { setError('Elegi al menos una camara.'); return; }
     setError('');
     setGuardando(true);
     try {
-      await client.post(`/cuentas-nvr/${cuentaId}/accesos`, {
-        camara_id: modalAcceso.camara_id,
-        grupo: modalAcceso.grupo.trim() || undefined,
-        en_vivo: modalAcceso.en_vivo,
-        reproduccion: modalAcceso.reproduccion,
-      });
+      // Secuencial, mismo criterio que guardarAccesoRapido: son pocas por
+      // tanda, no vale la pena Promise.all para esto.
+      for (const camaraId of modalAcceso.camara_ids) {
+        await client.post(`/cuentas-nvr/${cuentaId}/accesos`, {
+          camara_id: camaraId,
+          grupo: modalAcceso.grupo.trim() || undefined,
+          en_vivo: modalAcceso.en_vivo,
+          reproduccion: modalAcceso.reproduccion,
+        });
+      }
       setModalAcceso(null);
       await cargarDetalle();
       await cargarCuentas();
@@ -574,7 +621,7 @@ export default function AccesosNvr() {
         {modalAcceso && (
           <>
             <div className="modal d-block" tabIndex="-1" role="dialog" onClick={(e) => { if (e.target === e.currentTarget) setModalAcceso(null); }}>
-              <div className="modal-dialog modal-dialog-centered" role="document" style={{ maxWidth: 750 }}>
+              <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable" role="document" style={{ maxWidth: modalAcceso.accesoId ? 750 : 980 }}>
                 <form className="modal-content" onSubmit={guardarAcceso}>
                   <div className="modal-header">
                     <h2 className="modal-title h5">{modalAcceso.accesoId ? `Editar acceso — ${modalAcceso.nombre}` : 'Agregar camara'}</h2>
@@ -583,33 +630,105 @@ export default function AccesosNvr() {
                   <div className="modal-body">
                     {!modalAcceso.accesoId && (
                       <p className="text-body-secondary small">
-                        Se crea como <span className="badge text-bg-warning">Pendiente</span> — es tu borrador hasta que apliques
-                        el permiso en el NVR/HikCentral real y vuelvas a marcarlo como Concedido.
+                        Se crea{modalAcceso.camara_ids.length > 1 ? 'n' : ''} como <span className="badge text-bg-warning">Pendiente</span> — es tu borrador hasta que apliques
+                        el permiso en el NVR/HikCentral real y vuelvas a marcarlo{modalAcceso.camara_ids.length > 1 ? 's' : ''} como Concedido.
                       </p>
                     )}
                     {!modalAcceso.accesoId && (
                       <div className="mb-3">
-                        <label className="form-label">Camara</label>
+                        <label className="form-label">Camaras</label>
                         <input
                           className="form-control mb-2"
                           placeholder="Buscar por hostname, IP, descripcion, edificio o area..."
                           value={busquedaCamaraModal}
                           onChange={(e) => setBusquedaCamaraModal(e.target.value)}
                         />
-                        <select
-                          className="form-select"
-                          size={8}
-                          value={modalAcceso.camara_id}
-                          onChange={(e) => setModalAcceso((m) => ({ ...m, camara_id: Number(e.target.value) }))}
-                          required
-                        >
-                          <option value="" disabled>Elegi una camara...</option>
-                          {camarasFiltradasModal.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {(c.descripcion || c.hostname)} — {c.edificio} · {c.piso} · {c.area}{c.ip ? ` · ${c.ip}` : ''}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="row g-2 mb-2">
+                          <div className="col-4">
+                            <select
+                              className="form-select form-select-sm"
+                              value={modalAcceso.filtroEdificio}
+                              onChange={(e) => setModalAcceso((m) => ({ ...m, filtroEdificio: e.target.value }))}
+                            >
+                              <option value="">Todos los edificios</option>
+                              {edificiosModal.map((v) => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                          </div>
+                          <div className="col-4">
+                            <select
+                              className="form-select form-select-sm"
+                              value={modalAcceso.filtroPiso}
+                              onChange={(e) => setModalAcceso((m) => ({ ...m, filtroPiso: e.target.value }))}
+                            >
+                              <option value="">Todos los pisos</option>
+                              {pisosModal.map((v) => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                          </div>
+                          <div className="col-4">
+                            <select
+                              className="form-select form-select-sm"
+                              value={modalAcceso.filtroArea}
+                              onChange={(e) => setModalAcceso((m) => ({ ...m, filtroArea: e.target.value }))}
+                            >
+                              <option value="">Todas las areas</option>
+                              {areasModal.map((v) => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <div className="text-body-secondary small">
+                            {camarasFiltradasModal.length} camara{camarasFiltradasModal.length === 1 ? '' : 's'}
+                            {modalAcceso.camara_ids.length > 0 && (
+                              <> · <strong>{modalAcceso.camara_ids.length} seleccionada{modalAcceso.camara_ids.length === 1 ? '' : 's'}</strong></>
+                            )}
+                          </div>
+                          <div className="d-flex gap-3">
+                            {camarasFiltradasModal.length > 0 && (
+                              <button type="button" className="btn btn-sm btn-link p-0" onClick={seleccionarTodasVisibles}>Seleccionar todas</button>
+                            )}
+                            {modalAcceso.camara_ids.length > 0 && (
+                              <button type="button" className="btn btn-sm btn-link p-0 text-danger" onClick={() => setModalAcceso((m) => ({ ...m, camara_ids: [] }))}>Limpiar</button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="camara-picker-grid border rounded p-2">
+                          {camarasFiltradasModal.map((c) => {
+                            const seleccionada = modalAcceso.camara_ids.includes(c.id);
+                            return (
+                              <div
+                                key={c.id}
+                                role="button"
+                                className={`camara-picker-card ${seleccionada ? 'camara-picker-card-selected' : ''}`}
+                                onClick={() => toggleCamaraSeleccionada(c.id)}
+                              >
+                                <div className="camara-picker-thumb">
+                                  {c.imagen_url ? (
+                                    <img src={urlFoto(c.imagen_url)} alt={c.descripcion || c.hostname} />
+                                  ) : (
+                                    <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                      <rect x="3" y="7" width="15" height="12" rx="2" /><path d="M18 10l4-2v10l-4-2" />
+                                    </svg>
+                                  )}
+                                  <input
+                                    type="checkbox"
+                                    className="form-check-input camara-picker-check"
+                                    checked={seleccionada}
+                                    onChange={() => toggleCamaraSeleccionada(c.id)}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </div>
+                                <div className="camara-picker-info">
+                                  <div className="fw-semibold small text-truncate" title={c.descripcion || c.hostname}>{c.descripcion || c.hostname}</div>
+                                  <div className="text-body-secondary small text-truncate" title={`${c.edificio} · ${c.piso} · ${c.area}`}>{c.edificio} · {c.piso} · {c.area}</div>
+                                  {c.ip && <div className="text-body-secondary small text-truncate">{c.ip}</div>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {camarasFiltradasModal.length === 0 && (
+                            <div className="text-body-secondary small p-3">Ninguna camara coincide con la busqueda/filtros.</div>
+                          )}
+                        </div>
                       </div>
                     )}
                     <div className="mb-3">
@@ -647,7 +766,9 @@ export default function AccesosNvr() {
                   </div>
                   <div className="modal-footer">
                     <button type="button" className="btn btn-outline-secondary" onClick={() => setModalAcceso(null)}>Cancelar</button>
-                    <button type="submit" className="btn btn-primary" disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar'}</button>
+                    <button type="submit" className="btn btn-primary" disabled={guardando || (!modalAcceso.accesoId && modalAcceso.camara_ids.length === 0)}>
+                      {guardando ? 'Guardando...' : (!modalAcceso.accesoId && modalAcceso.camara_ids.length > 1 ? `Guardar (${modalAcceso.camara_ids.length})` : 'Guardar')}
+                    </button>
                   </div>
                 </form>
               </div>
