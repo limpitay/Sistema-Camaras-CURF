@@ -44,9 +44,19 @@ router.get('/mios', auth, (req, res) => {
 // paneles/columnas/filtros disponibles (una sola fuente de verdad, ver
 // permisosRegistro.js — el frontend no duplica los labels).
 router.get('/', auth, requireRole('admin'), (req, res) => {
-  const overridesPaneles = db.prepare('SELECT rol, panel FROM permisos_paneles WHERE visible = 0').all();
-  const overridesColumnas = db.prepare('SELECT rol, tabla, columna FROM permisos_columnas WHERE visible = 0').all();
-  const overridesFiltros = db.prepare('SELECT rol, tabla, filtro FROM permisos_filtros WHERE visible = 0').all();
+  // Filtrado contra el registro actual, no solo lectura cruda: si una
+  // columna/filtro/panel se renombra o se saca de permisosRegistro.js, la
+  // fila vieja en la base queda huerfana (ya no hay forma de togglearla
+  // desde la UI) — sin este filtro, GET la seguia devolviendo, el frontend
+  // la reenviaba tal cual al guardar, y el PUT de mas abajo la rechazaba
+  // (bloqueaba guardar cualquier otro cambio real). Al no devolverla aca,
+  // el proximo PUT (que reemplaza todo) la limpia sola de la base.
+  const overridesPaneles = db.prepare('SELECT rol, panel FROM permisos_paneles WHERE visible = 0').all()
+    .filter(({ rol, panel }) => (PANELES_POR_ROL[rol] || []).includes(panel));
+  const overridesColumnas = db.prepare('SELECT rol, tabla, columna FROM permisos_columnas WHERE visible = 0').all()
+    .filter(({ tabla, columna }) => TABLAS_COLUMNAS[tabla]?.columnas[columna]);
+  const overridesFiltros = db.prepare('SELECT rol, tabla, filtro FROM permisos_filtros WHERE visible = 0').all()
+    .filter(({ tabla, filtro }) => TABLAS_FILTROS[tabla]?.filtros[filtro]);
   res.json({
     roles: ROLES_CONFIGURABLES,
     panelesPorRol: PANELES_POR_ROL,
