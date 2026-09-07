@@ -172,7 +172,7 @@ export default function Nvr() {
                             <th>IP</th>
                             <th>Grabacion mas antigua</th>
                             <th>Dias disponibles</th>
-                            <th>Almacenamiento estimado</th>
+                            <th>Usado (aproximado)</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -195,7 +195,7 @@ export default function Nvr() {
                         {canales.some((c) => c.gbEstimado != null) && (
                           <tfoot>
                             <tr className="fw-semibold">
-                              <td colSpan={5} className="text-end">Total estimado</td>
+                              <td colSpan={5} className="text-end">Total usado (aproximado)</td>
                               <td>~{canales.reduce((acc, c) => acc + (c.gbEstimado || 0), 0).toFixed(0)} GB</td>
                             </tr>
                           </tfoot>
