@@ -13,9 +13,15 @@ function formatearMb(mb) {
   return gb >= 1 ? `${gb.toFixed(1)} GB` : `${mb} MB`;
 }
 
+// dd-mm-aaaa hh:mm:ss en hora Argentina (UTC-3 fijo, sin horario de
+// verano) -- mismo formato que el script de referencia por fuera de la app.
 function formatearFecha(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('es-AR');
+  const argentina = new Date(new Date(iso).getTime() - 3 * 60 * 60 * 1000);
+  const pad = (n) => String(n).padStart(2, '0');
+  const fecha = `${pad(argentina.getUTCDate())}-${pad(argentina.getUTCMonth() + 1)}-${argentina.getUTCFullYear()}`;
+  const hora = `${pad(argentina.getUTCHours())}:${pad(argentina.getUTCMinutes())}:${pad(argentina.getUTCSeconds())}`;
+  return `${fecha} ${hora} (ARG)`;
 }
 
 export default function Nvr() {
