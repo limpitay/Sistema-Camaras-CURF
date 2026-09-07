@@ -155,10 +155,12 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
     return res.status(400).json({ error: 'Este NVR no tiene "canales_totales" cargado (Recursos > NVR)' });
   }
 
-  const camarasPorCanal = new Map(
-    db.prepare('SELECT canal, hostname, descripcion, estado FROM camaras WHERE nvr_id = ? AND canal IS NOT NULL').all(nvr.id)
-      .map((c) => [c.canal, c])
-  );
+  const camarasDelNvr = db.prepare('SELECT canal, ip, hostname, descripcion, estado FROM camaras WHERE nvr_id = ?').all(nvr.id);
+  const camarasPorCanal = new Map(camarasDelNvr.filter((c) => c.canal != null).map((c) => [c.canal, c]));
+  // Fallback por IP para cuando el campo `canal` todavia no se cargo a mano
+  // en el inventario local -- ISAPI ya nos da la IP real conectada a cada
+  // canal, asi que alcanza con que coincida con camaras.ip.
+  const camarasPorIp = new Map(camarasDelNvr.filter((c) => c.ip).map((c) => [c.ip, c]));
 
   let estadoPorCanal = new Map();
   try {
@@ -192,7 +194,7 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
 
     canales.push({
       canal,
-      camara: camarasPorCanal.get(canal) || null,
+      camara: camarasPorCanal.get(canal) || (estado?.ip ? camarasPorIp.get(estado.ip) : null) || null,
       online: estado?.online ?? null,
       ip: estado?.ip ?? null,
       passwordEstado: estado?.passwordEstado ?? null,

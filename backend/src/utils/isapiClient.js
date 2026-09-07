@@ -159,11 +159,18 @@ async function obtenerParametrosVideoCanal(nvr, canal) {
 // POST /ISAPI/ContentMgmt/search — busca la grabacion mas antigua de un
 // canal (trackID = canal*100+1, stream principal) para estimar la
 // retencion real de grabacion disponible en ese canal.
+//
+// Dos detalles no documentados que hacen falta para que este NVR (firmware
+// V4.84.100) acepte el body -- sin ellos tira "badXmlContent" pase lo que
+// pase con el resto del XML (probado directo en Postman tambien, no es un
+// problema del cliente): searchID tiene que ser un UUID valido (no un string
+// cualquiera), y metadataDescriptor tiene que ser exactamente
+// "//metadata.psia.org/VideoMotion".
 async function buscarGrabacionMasAntigua(nvr, canal) {
   const trackId = canal * 100 + 1;
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <CMSearchDescription>
-  <searchID>curf-${trackId}-${Date.now()}</searchID>
+  <searchID>${crypto.randomUUID().toUpperCase()}</searchID>
   <trackList>
     <trackID>${trackId}</trackID>
   </trackList>
@@ -173,8 +180,14 @@ async function buscarGrabacionMasAntigua(nvr, canal) {
       <endTime>${new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')}</endTime>
     </timeSpan>
   </timeSpanList>
+  <contentTypeList>
+    <contentType>video</contentType>
+  </contentTypeList>
   <maxResults>1</maxResults>
   <searchResultPostion>0</searchResultPostion>
+  <metadataList>
+    <metadataDescriptor>//metadata.psia.org/VideoMotion</metadataDescriptor>
+  </metadataList>
 </CMSearchDescription>`;
 
   const data = await isapiXml(nvr, 'POST', '/ISAPI/ContentMgmt/search', body);
