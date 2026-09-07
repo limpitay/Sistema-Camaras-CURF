@@ -2,6 +2,9 @@ const express = require('express');
 const db = require('../db');
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
+const {
+  obtenerInfoDispositivo, obtenerEstadoDiscos, obtenerEstadoCanales, obtenerParametrosVideoCanal, buscarGrabacionMasAntigua,
+} = require('../utils/isapiClient');
 
 const router = express.Router();
 
@@ -15,9 +18,24 @@ const SELECT_BASE = `
   LEFT JOIN pisos p ON p.id = n.piso_id
 `;
 
+// usuario/contrasena son el login ISAPI del propio NVR (migracion 028) — no
+// tienen por que llegar a mando_medio/direccion, que hoy no tienen pantalla
+// que los use pero si pueden pegarle a este endpoint directo con su sesion.
+// Mismo criterio que CAMPOS_MANDO_MEDIO en camaras.js.
+function ocultarCredenciales(row) {
+  // eslint-disable-next-line no-unused-vars
+  const { usuario, contrasena, ...resto } = row;
+  return resto;
+}
+
+function seleccionarCampos(row, rol) {
+  return ['admin', 'avanzado', 'sistemas_lectura'].includes(rol) ? row : ocultarCredenciales(row);
+}
+
 // GET /api/nvrs
 router.get('/', auth, (req, res) => {
-  res.json(db.prepare(`${SELECT_BASE} ORDER BY n.hostname`).all());
+  const filas = db.prepare(`${SELECT_BASE} ORDER BY n.hostname`).all();
+  res.json(filas.map((row) => seleccionarCampos(row, req.user.rol)));
 });
 
 // GET /api/nvrs/:id — incluye el detalle de las camaras asociadas
@@ -29,12 +47,12 @@ router.get('/:id', auth, (req, res) => {
     'SELECT id, hostname, descripcion, estado FROM camaras WHERE nvr_id = ? ORDER BY hostname'
   ).all(req.params.id);
 
-  res.json({ ...nvr, camaras });
+  res.json({ ...seleccionarCampos(nvr, req.user.rol), camaras });
 });
 
 // POST /api/nvrs — Admin/Avanzado
 router.post('/', auth, requireRole('admin', 'avanzado'), (req, res) => {
-  const { hostname, ip, mac_address, edificio_id, piso_id, marca, modelo, canales_totales } = req.body;
+  const { hostname, ip, mac_address, edificio_id, piso_id, marca, modelo, canales_totales, usuario, contrasena } = req.body;
   if (!hostname) return res.status(400).json({ error: 'hostname es requerido' });
   if (edificio_id && !db.prepare('SELECT id FROM edificios WHERE id = ?').get(edificio_id)) {
     return res.status(400).json({ error: 'edificio_id no existe' });
@@ -46,8 +64,8 @@ router.post('/', auth, requireRole('admin', 'avanzado'), (req, res) => {
   let lastInsertRowid;
   try {
     ({ lastInsertRowid } = db.prepare(
-      'INSERT INTO nvrs (hostname, ip, mac_address, edificio_id, piso_id, marca, modelo, canales_totales) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(hostname, ip || null, mac_address || null, edificio_id || null, piso_id || null, marca || null, modelo || null, canales_totales || null));
+      'INSERT INTO nvrs (hostname, ip, mac_address, edificio_id, piso_id, marca, modelo, canales_totales, usuario, contrasena) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(hostname, ip || null, mac_address || null, edificio_id || null, piso_id || null, marca || null, modelo || null, canales_totales || null, usuario || null, contrasena || null));
   } catch (err) {
     if (/UNIQUE constraint failed/.test(err.message)) {
       return res.status(409).json({ error: 'Ya existe un NVR con ese hostname' });
@@ -55,7 +73,7 @@ router.post('/', auth, requireRole('admin', 'avanzado'), (req, res) => {
     throw err;
   }
 
-  res.status(201).json(db.prepare(`${SELECT_BASE} WHERE n.id = ?`).get(lastInsertRowid));
+  res.status(201).json(seleccionarCampos(db.prepare(`${SELECT_BASE} WHERE n.id = ?`).get(lastInsertRowid), req.user.rol));
 });
 
 // PUT /api/nvrs/:id — Admin/Avanzado
@@ -63,7 +81,7 @@ router.put('/:id', auth, requireRole('admin', 'avanzado'), (req, res) => {
   const actual = db.prepare('SELECT * FROM nvrs WHERE id = ?').get(req.params.id);
   if (!actual) return res.status(404).json({ error: 'NVR no encontrado' });
 
-  const { hostname, ip, mac_address, edificio_id, piso_id, marca, modelo, canales_totales } = req.body;
+  const { hostname, ip, mac_address, edificio_id, piso_id, marca, modelo, canales_totales, usuario, contrasena } = req.body;
   if (!hostname) return res.status(400).json({ error: 'hostname es requerido' });
   if (edificio_id && !db.prepare('SELECT id FROM edificios WHERE id = ?').get(edificio_id)) {
     return res.status(400).json({ error: 'edificio_id no existe' });
@@ -73,8 +91,16 @@ router.put('/:id', auth, requireRole('admin', 'avanzado'), (req, res) => {
   }
 
   try {
-    db.prepare('UPDATE nvrs SET hostname = ?, ip = ?, mac_address = ?, edificio_id = ?, piso_id = ?, marca = ?, modelo = ?, canales_totales = ? WHERE id = ?')
-      .run(hostname, ip || null, mac_address || null, edificio_id || null, piso_id || null, marca || null, modelo || null, canales_totales || null, req.params.id);
+    db.prepare(
+      `UPDATE nvrs SET hostname = ?, ip = ?, mac_address = ?, edificio_id = ?, piso_id = ?, marca = ?, modelo = ?,
+         canales_totales = ?, usuario = ?, contrasena = ? WHERE id = ?`
+    ).run(
+      hostname, ip || null, mac_address || null, edificio_id || null, piso_id || null, marca || null, modelo || null,
+      canales_totales || null,
+      usuario === undefined ? actual.usuario : (usuario || null),
+      contrasena === undefined ? actual.contrasena : (contrasena || null),
+      req.params.id
+    );
   } catch (err) {
     if (/UNIQUE constraint failed/.test(err.message)) {
       return res.status(409).json({ error: 'Ya existe un NVR con ese hostname' });
@@ -82,7 +108,7 @@ router.put('/:id', auth, requireRole('admin', 'avanzado'), (req, res) => {
     throw err;
   }
 
-  res.json(db.prepare(`${SELECT_BASE} WHERE n.id = ?`).get(req.params.id));
+  res.json(seleccionarCampos(db.prepare(`${SELECT_BASE} WHERE n.id = ?`).get(req.params.id), req.user.rol));
 });
 
 // DELETE /api/nvrs/:id — Admin. Bloqueado si tiene camaras asociadas (para no
@@ -100,6 +126,84 @@ router.delete('/:id', auth, requireRole('admin'), (req, res) => {
 
   db.prepare('DELETE FROM nvrs WHERE id = ?').run(id);
   res.status(204).end();
+});
+
+// GET /api/nvrs/:id/estado — Panel NVR (dashboard): info en vivo del
+// dispositivo (ISAPI) + estado de sus discos. Solo Admin/Avanzado/lectura,
+// que son quienes tienen acceso al panel NVR (ver App.jsx).
+router.get('/:id/estado', auth, requireRole('admin', 'avanzado', 'sistemas_lectura'), async (req, res) => {
+  const nvr = db.prepare('SELECT * FROM nvrs WHERE id = ?').get(req.params.id);
+  if (!nvr) return res.status(404).json({ error: 'NVR no encontrado' });
+
+  try {
+    const [dispositivo, discos] = await Promise.all([obtenerInfoDispositivo(nvr), obtenerEstadoDiscos(nvr)]);
+    res.json({ dispositivo, discos });
+  } catch (err) {
+    res.status(502).json({ error: `No se pudo consultar el NVR: ${err.message}` });
+  }
+});
+
+// GET /api/nvrs/:id/canales — Panel NVR: por cada canal (1..canales_totales),
+// que camara local tiene conectada (via camaras.canal), estado online/IP/
+// password (un solo pedido para todos), resolucion/codec/bitrate real del
+// stream principal, y la grabacion mas antigua (para estimar cuantos dias de
+// historial quedan antes de que el NVR empiece a sobrescribir).
+router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lectura'), async (req, res) => {
+  const nvr = db.prepare('SELECT * FROM nvrs WHERE id = ?').get(req.params.id);
+  if (!nvr) return res.status(404).json({ error: 'NVR no encontrado' });
+  if (!nvr.canales_totales) {
+    return res.status(400).json({ error: 'Este NVR no tiene "canales_totales" cargado (Recursos > NVR)' });
+  }
+
+  const camarasPorCanal = new Map(
+    db.prepare('SELECT canal, hostname, descripcion, estado FROM camaras WHERE nvr_id = ? AND canal IS NOT NULL').all(nvr.id)
+      .map((c) => [c.canal, c])
+  );
+
+  let estadoPorCanal = new Map();
+  try {
+    estadoPorCanal = new Map((await obtenerEstadoCanales(nvr)).map((c) => [c.canal, c]));
+  } catch (err) {
+    return res.status(502).json({ error: `No se pudo consultar el estado de canales del NVR: ${err.message}` });
+  }
+
+  // Secuencial, no en paralelo: los NVR embebidos limitan cuantas sesiones
+  // HTTP/ISAPI concurrentes aceptan, y bombardearlos con 16-32 pedidos a la
+  // vez hace que empiecen a rechazar conexiones.
+  const canales = [];
+  for (let canal = 1; canal <= nvr.canales_totales; canal += 1) {
+    const estado = estadoPorCanal.get(canal) || null;
+
+    let video = null;
+    try {
+      video = await obtenerParametrosVideoCanal(nvr, canal);
+    } catch { /* canal sin stream configurado (ej. sin camara conectada) */ }
+
+    let grabacionMasAntigua = null;
+    let error = null;
+    try {
+      grabacionMasAntigua = await buscarGrabacionMasAntigua(nvr, canal);
+    } catch (err) {
+      error = err.message;
+    }
+    const diasDisponibles = grabacionMasAntigua
+      ? Math.floor((Date.now() - new Date(grabacionMasAntigua).getTime()) / 86400000)
+      : null;
+
+    canales.push({
+      canal,
+      camara: camarasPorCanal.get(canal) || null,
+      online: estado?.online ?? null,
+      ip: estado?.ip ?? null,
+      passwordEstado: estado?.passwordEstado ?? null,
+      video,
+      grabacionMasAntigua,
+      diasDisponibles,
+      error,
+    });
+  }
+
+  res.json(canales);
 });
 
 module.exports = router;

@@ -188,6 +188,7 @@ export default function Crud() {
   const [detalleCamara, setDetalleCamara] = useState(null);
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
+  const [trayendoFoto, setTrayendoFoto] = useState(false);
 
   const cargarCamaras = () => client.get('/camaras').then((res) => setCamaras(res.data));
   const cargarNvrs = () => client.get('/nvrs').then((res) => setNvrs(res.data));
@@ -198,6 +199,23 @@ export default function Crud() {
   useEffect(() => { cargarCamaras(); cargarNvrs(); cargarEdificios(); cargarPisos(); cargarAreas(); }, []);
 
   const cerrarModal = () => { setModal(null); setError(''); };
+
+  // Solo disponible editando una camara ya guardada (necesita el id) y
+  // marcada como Hikvision — trae una captura en vivo desde HikCentral vía
+  // Artemis y pisa la imagen actual, igual que si se hubiera subido a mano.
+  const traerFotoHikvision = async () => {
+    setError('');
+    setTrayendoFoto(true);
+    try {
+      const { data } = await client.post(`/camaras/${modal.id}/foto-hikvision`);
+      setModal((m) => ({ ...m, imagenArchivo: null, imagenUrl: '', imagenActual: data.imagen_url }));
+      await cargarCamaras();
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo traer la foto desde HikCentral.');
+    } finally {
+      setTrayendoFoto(false);
+    }
+  };
 
   const abrirModalCamara = (fila) => setModal({
     tipo: 'camara',
@@ -231,6 +249,8 @@ export default function Crud() {
     marca: fila?.marca ?? '',
     modelo: fila?.modelo ?? '',
     canales_totales: fila?.canales_totales ?? '',
+    usuario: fila?.usuario ?? '',
+    contrasena: fila?.contrasena ?? '',
   });
   const abrirModalEdificio = (fila) => setModal({ tipo: 'edificio', id: fila?.id ?? null, nombre: fila?.nombre ?? '' });
   const abrirModalPiso = (fila) => setModal({ tipo: 'piso', id: fila?.id ?? null, nombre: fila?.nombre ?? '' });
@@ -277,6 +297,8 @@ export default function Crud() {
           marca: modal.marca.trim() || undefined,
           modelo: modal.modelo.trim() || undefined,
           canales_totales: modal.canales_totales || undefined,
+          usuario: modal.usuario.trim() || undefined,
+          contrasena: modal.contrasena.trim() || undefined,
         };
         if (modal.id) await client.put(`/nvrs/${modal.id}`, datos);
         else await client.post('/nvrs', datos);
@@ -808,6 +830,18 @@ export default function Crud() {
                         </div>
 
                         <h3 className="h6 fw-semibold mb-2 mt-4">Imagen</h3>
+                        {modal.id && /hikvision/i.test(modal.marca) && (
+                          <div className="mb-2">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-secondary"
+                              disabled={trayendoFoto}
+                              onClick={traerFotoHikvision}
+                            >
+                              {trayendoFoto ? 'Trayendo foto...' : 'Traer foto de HikCentral'}
+                            </button>
+                          </div>
+                        )}
                         {modal.imagenActual && (
                           <div className="d-flex align-items-center gap-2 mb-2">
                             <img src={urlFoto(modal.imagenActual)} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 6 }} />
@@ -886,6 +920,22 @@ export default function Crud() {
                               <option value="">Sin definir</option>
                               {pisos.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                             </select>
+                          </div>
+                        </div>
+
+                        <h3 className="h6 fw-semibold mb-2 mt-4">Login ISAPI (Panel NVR)</h3>
+                        <p className="small text-body-secondary mb-2">
+                          Usuario admin del propio equipo, para que el Panel NVR pueda consultarlo en vivo (info,
+                          discos, grabaciones). No tiene relacion con las cuentas de Accesos NVR.
+                        </p>
+                        <div className="row g-3">
+                          <div className="col-6">
+                            <label className="form-label">Usuario</label>
+                            <input className="form-control" value={modal.usuario} onChange={(e) => setModal((m) => ({ ...m, usuario: e.target.value }))} />
+                          </div>
+                          <div className="col-6">
+                            <label className="form-label">Contrasena</label>
+                            <input className="form-control" value={modal.contrasena} onChange={(e) => setModal((m) => ({ ...m, contrasena: e.target.value }))} />
                           </div>
                         </div>
                       </>

@@ -11,6 +11,7 @@ import Solicitudes from './pages/Solicitudes';
 import PendientesHikCentral from './pages/PendientesHikCentral';
 import Historial from './pages/Historial';
 import AccesosNvr from './pages/AccesosNvr';
+import Nvr from './pages/Nvr';
 
 function PrivateRoute({ roles, children }) {
   const { user, loading } = useAuth();
@@ -64,6 +65,10 @@ export default function App() {
 
           <Route path="/accesos-nvr" element={
             <PrivateRoute roles={['admin', 'avanzado', 'sistemas_lectura']}><AccesosNvr /></PrivateRoute>
+          } />
+
+          <Route path="/nvr" element={
+            <PrivateRoute roles={['admin', 'avanzado', 'sistemas_lectura']}><Nvr /></PrivateRoute>
           } />
 
           <Route path="/pendientes-hikcentral" element={

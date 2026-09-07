@@ -5,6 +5,7 @@ const db = require('../db');
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
 const { upload, UPLOADS_DIR, nombreArchivoImagen } = require('../middleware/upload');
+const { listarCamarasArtemis, capturarFoto, descargarImagen } = require('../utils/artemisClient');
 
 const router = express.Router();
 
@@ -210,6 +211,65 @@ router.patch('/:id/estado', auth, requireRole('admin', 'avanzado'), (req, res) =
   if (resultado.changes === 0) return res.status(404).json({ error: 'Camara no encontrada' });
 
   const actualizada = db.prepare(`${SELECT_BASE} WHERE c.id = ?`).get(req.params.id);
+  res.json(seleccionarCampos(actualizada, 'admin'));
+});
+
+// POST /api/camaras/:id/foto-hikvision — RF-06 (nuevo origen para la foto):
+// trae una captura en vivo desde HikCentral via la API Artemis, solo para
+// camaras marca Hikvision. Mismo criterio de guardado que la carga manual
+// (pisa imagen_url y el archivo en UPLOADS_DIR con el mismo nombre).
+router.post('/:id/foto-hikvision', auth, requireRole('admin', 'avanzado'), async (req, res) => {
+  const camara = db.prepare('SELECT * FROM camaras WHERE id = ?').get(req.params.id);
+  if (!camara) return res.status(404).json({ error: 'Camara no encontrada' });
+  if (!/hikvision/i.test(camara.marca || '')) {
+    return res.status(400).json({ error: 'Esta camara no esta marcada como Hikvision (revisa el campo Marca)' });
+  }
+
+  let listado;
+  try {
+    listado = await listarCamarasArtemis();
+  } catch (err) {
+    return res.status(502).json({ error: `No se pudo consultar el listado de camaras de HikCentral: ${err.message}` });
+  }
+
+  // HikCentral no expone un campo estable unico entre versiones para "IP" ni
+  // para "hostname tecnico" — se prueban varios nombres de campo conocidos
+  // de la API antes de caer al nombre visible de la camara.
+  const ip = (camara.ip || '').trim();
+  const hostname = (camara.hostname || '').trim().toLowerCase();
+  const match = listado.find((c) => {
+    const ipsCandidatas = [c.ip, c.ipAddr, c.devIp, c.deviceIp].filter(Boolean).map(String);
+    if (ip && ipsCandidatas.includes(ip)) return true;
+    return hostname && (c.cameraName || '').trim().toLowerCase() === hostname;
+  });
+  if (!match) {
+    return res.status(404).json({
+      error: `No se encontro en HikCentral una camara que coincida con IP "${camara.ip || '-'}" ni con hostname "${camara.hostname}". Verifica que esos datos coincidan con el nombre/IP cargados en HikCentral.`,
+    });
+  }
+
+  let picUrl;
+  try {
+    picUrl = await capturarFoto(match.cameraIndexCode);
+  } catch (err) {
+    return res.status(502).json({ error: `HikCentral no pudo capturar la foto: ${err.message}` });
+  }
+
+  let buffer;
+  try {
+    buffer = await descargarImagen(picUrl);
+  } catch (err) {
+    return res.status(502).json({ error: `No se pudo descargar la foto capturada: ${err.message}` });
+  }
+
+  const nombreActual = camara.imagen_url ? path.basename(camara.imagen_url) : null;
+  const nombreFinal = nombreArchivoImagen(camara.hostname, camara.ip, '.jpg', nombreActual);
+  fs.writeFileSync(path.join(UPLOADS_DIR, nombreFinal), buffer);
+  const imagen_url = `/api/uploads/camaras/${nombreFinal}`;
+
+  db.prepare('UPDATE camaras SET imagen_url = ? WHERE id = ?').run(imagen_url, camara.id);
+
+  const actualizada = db.prepare(`${SELECT_BASE} WHERE c.id = ?`).get(camara.id);
   res.json(seleccionarCampos(actualizada, 'admin'));
 });
 

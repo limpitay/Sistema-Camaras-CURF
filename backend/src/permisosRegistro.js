@@ -15,7 +15,7 @@ const ROLES_CONFIGURABLES = ['avanzado', 'sistemas_lectura', 'direccion', 'mando
 // para no perder la seleccion si mas adelante se vuelve a mostrar el grupo.
 const PANELES_POR_ROL = {
   avanzado: [
-    'dashboard', 'recursos', 'accesos-nvr', 'usuarios',
+    'dashboard', 'recursos', 'accesos-nvr', 'usuarios', 'nvr-panel',
     'recursos-camaras', 'recursos-nvrs', 'recursos-edificios', 'recursos-pisos', 'recursos-areas',
   ],
   // sistemas_lectura solo llega a Recursos → Camaras y NVR, nunca a
@@ -23,7 +23,7 @@ const PANELES_POR_ROL = {
   // backend siguen exclusivas de admin/avanzado — ver camaras.js/nvrs.js —
   // asi que en Crud.jsx los botones de Agregar/Editar quedan ocultos para
   // este rol, no solo el panel).
-  sistemas_lectura: ['dashboard', 'recursos', 'recursos-camaras', 'recursos-nvrs', 'accesos-nvr'],
+  sistemas_lectura: ['dashboard', 'recursos', 'recursos-camaras', 'recursos-nvrs', 'accesos-nvr', 'nvr-panel'],
   direccion: ['accesos-nvr'],
   mando_medio: ['camaras', 'mis-solicitudes'],
 };
@@ -40,6 +40,7 @@ const PANEL_LABEL = {
   'recursos-edificios': 'Edificios',
   'recursos-pisos': 'Pisos',
   'recursos-areas': 'Areas',
+  'nvr-panel': 'Panel NVR',
 };
 
 const TABLAS_COLUMNAS = {
