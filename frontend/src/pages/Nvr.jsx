@@ -170,7 +170,6 @@ export default function Nvr() {
                             <th>Camara</th>
                             <th>Estado</th>
                             <th>IP</th>
-                            <th>Video</th>
                             <th>Grabacion mas antigua</th>
                             <th>Dias disponibles</th>
                             <th>Almacenamiento estimado</th>
@@ -187,9 +186,6 @@ export default function Nvr() {
                                 )}
                               </td>
                               <td className="small text-body-secondary">{c.ip || '—'}</td>
-                              <td className="small">
-                                {c.video ? `${c.video.ancho}x${c.video.alto} ${c.video.codec || ''} (${c.video.bitrateMaxKbps ?? '?'} kbps)` : '—'}
-                              </td>
                               <td>{c.error ? <span className="text-danger small">{c.error}</span> : formatearFecha(c.grabacionMasAntigua)}</td>
                               <td>{c.diasDisponibles ?? '—'}</td>
                               <td>{c.gbEstimado != null ? `~${c.gbEstimado.toFixed(1)} GB` : '—'}</td>
@@ -199,7 +195,7 @@ export default function Nvr() {
                         {canales.some((c) => c.gbEstimado != null) && (
                           <tfoot>
                             <tr className="fw-semibold">
-                              <td colSpan={6} className="text-end">Total estimado</td>
+                              <td colSpan={5} className="text-end">Total estimado</td>
                               <td>~{canales.reduce((acc, c) => acc + (c.gbEstimado || 0), 0).toFixed(0)} GB</td>
                             </tr>
                           </tfoot>
