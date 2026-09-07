@@ -140,6 +140,22 @@ export default function Nvr() {
                             </div>
                           );
                         })}
+                        {estado.discos.length > 0 && (() => {
+                          const capacidadTotal = estado.discos.reduce((acc, d) => acc + d.capacidadMb, 0);
+                          const libreTotal = estado.discos.reduce((acc, d) => acc + d.libreMb, 0);
+                          const usadoPctTotal = capacidadTotal ? Math.round(((capacidadTotal - libreTotal) / capacidadTotal) * 100) : 0;
+                          return (
+                            <div className="mb-0 mt-3 pt-2 border-top">
+                              <div className="d-flex justify-content-between small mb-1 fw-semibold">
+                                <span>Total ({estado.discos.length} disco{estado.discos.length > 1 ? 's' : ''})</span>
+                                <span className="text-body-secondary fw-normal">{formatearMb(libreTotal)} libres de {formatearMb(capacidadTotal)}</span>
+                              </div>
+                              <div className="progress" role="progressbar" aria-valuenow={usadoPctTotal} aria-valuemin={0} aria-valuemax={100} style={{ height: 10 }}>
+                                <div className={`progress-bar ${usadoPctTotal > 90 ? 'bg-danger' : ''}`} style={{ width: `${usadoPctTotal}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   )}
