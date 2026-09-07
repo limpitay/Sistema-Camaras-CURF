@@ -173,6 +173,7 @@ export default function Nvr() {
                             <th>Video</th>
                             <th>Grabacion mas antigua</th>
                             <th>Dias disponibles</th>
+                            <th>Almacenamiento estimado</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -184,9 +185,6 @@ export default function Nvr() {
                                 {c.online === null ? '—' : (
                                   <span className={`badge ${c.online ? 'text-bg-success' : 'text-bg-secondary'}`}>{c.online ? 'Online' : 'Offline'}</span>
                                 )}
-                                {c.passwordEstado && c.passwordEstado !== 'strong' && (
-                                  <span className="badge text-bg-warning ms-1" title="Contrasena debil/de riesgo en la camara">{c.passwordEstado}</span>
-                                )}
                               </td>
                               <td className="small text-body-secondary">{c.ip || '—'}</td>
                               <td className="small">
@@ -194,12 +192,25 @@ export default function Nvr() {
                               </td>
                               <td>{c.error ? <span className="text-danger small">{c.error}</span> : formatearFecha(c.grabacionMasAntigua)}</td>
                               <td>{c.diasDisponibles ?? '—'}</td>
+                              <td>{c.gbEstimado != null ? `~${c.gbEstimado.toFixed(1)} GB` : '—'}</td>
                             </tr>
                           ))}
                         </tbody>
+                        {canales.some((c) => c.gbEstimado != null) && (
+                          <tfoot>
+                            <tr className="fw-semibold">
+                              <td colSpan={6} className="text-end">Total estimado</td>
+                              <td>~{canales.reduce((acc, c) => acc + (c.gbEstimado || 0), 0).toFixed(0)} GB</td>
+                            </tr>
+                          </tfoot>
+                        )}
                       </table>
                     </div>
                   )}
+                  <p className="small text-body-secondary mt-2 mb-0">
+                    El almacenamiento es una estimacion (bitrate maximo configurado x dias grabados), no el consumo
+                    real medido por el NVR — no existe ese endpoint en modo overwrite/pool compartido.
+                  </p>
                 </div>
               </div>
             </div>

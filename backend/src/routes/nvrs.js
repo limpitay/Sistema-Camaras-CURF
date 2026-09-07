@@ -189,7 +189,14 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
       error = err.message;
     }
     const diasDisponibles = grabacionMasAntigua
-      ? Math.floor((Date.now() - new Date(grabacionMasAntigua).getTime()) / 86400000)
+      ? (Date.now() - new Date(grabacionMasAntigua).getTime()) / 86400000
+      : null;
+    // Estimacion de espacio ocupado (no hay endpoint que devuelva el consumo
+    // real en modo overwrite/pool compartido): bitrate maximo configurado *
+    // dias grabados, mismo criterio que ya se uso en un script de prueba
+    // aparte (0.0103 = KB/s a GB/dia: 1 kbps * 86400s / 8 / 1024^2).
+    const gbEstimado = video?.bitrateMaxKbps && diasDisponibles
+      ? video.bitrateMaxKbps * 0.0103 * diasDisponibles
       : null;
 
     canales.push({
@@ -197,10 +204,10 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
       camara: camarasPorCanal.get(canal) || (estado?.ip ? camarasPorIp.get(estado.ip) : null) || null,
       online: estado?.online ?? null,
       ip: estado?.ip ?? null,
-      passwordEstado: estado?.passwordEstado ?? null,
       video,
+      gbEstimado,
       grabacionMasAntigua,
-      diasDisponibles,
+      diasDisponibles: diasDisponibles != null ? Math.floor(diasDisponibles) : null,
       error,
     });
   }
