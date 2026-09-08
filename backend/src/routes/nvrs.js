@@ -5,6 +5,7 @@ const requireRole = require('../middleware/requireRole');
 const {
   obtenerInfoDispositivo, obtenerEstadoDiscos, obtenerEstadoCanales, obtenerNombresCanales, buscarGrabacionMasAntigua,
 } = require('../utils/isapiClient');
+const { listarCamarasArtemis } = require('../utils/artemisClient');
 
 const router = express.Router();
 
@@ -169,13 +170,28 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
     return res.status(502).json({ error: `No se pudo consultar el estado de canales del NVR: ${err.message}` });
   }
 
-  // Nombre configurado en HikCentral/el propio NVR (no en la base local) —
-  // si falla no bloquea el resto, es un dato de mas, no critico como el
-  // estado online/offline.
+  // Nombre crudo que el NVR guarda por canal (normalmente el hostname que la
+  // propia camara reporta, ej. "CAMONSS38") — si falla no bloquea el resto,
+  // es un dato de mas, no critico como el estado online/offline.
   let nombrePorCanal = new Map();
   try {
     nombrePorCanal = new Map((await obtenerNombresCanales(nvr)).map((c) => [c.canal, c.nombre]));
   } catch { /* seguimos sin nombre si falla */ }
+
+  // El nombre "de verdad" (curado, el que se ve en HikCentral > Dispositivo >
+  // Camara > Nombre) no vive en el NVR -- HikCentral lo devuelve como
+  // "<nombre curado> (<hostname crudo>)", asi que cruzamos por ese hostname
+  // crudo entre parentesis contra el nombre de arriba. Opcional: si Artemis
+  // no esta configurado o falla, se sigue mostrando el nombre crudo del NVR.
+  let descripcionPorHostname = new Map();
+  try {
+    const camarasArtemis = await listarCamarasArtemis();
+    descripcionPorHostname = new Map(
+      camarasArtemis
+        .map((c) => [c.cameraName?.match(/\(([^)]+)\)\s*$/)?.[1], c.cameraName])
+        .filter(([hostname]) => hostname)
+    );
+  } catch { /* seguimos con el nombre crudo del NVR si Artemis no responde */ }
 
   // Secuencial, no en paralelo: los NVR embebidos limitan cuantas sesiones
   // HTTP/ISAPI concurrentes aceptan, y bombardearlos con 16-32 pedidos a la
@@ -195,10 +211,11 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
       ? Math.floor((Date.now() - new Date(grabacionMasAntigua).getTime()) / 86400000)
       : null;
 
+    const nombreCrudo = nombrePorCanal.get(canal) || null;
     canales.push({
       canal,
       camara: camarasPorCanal.get(canal) || (estado?.ip ? camarasPorIp.get(estado.ip) : null) || null,
-      descripcion: nombrePorCanal.get(canal) || null,
+      descripcion: descripcionPorHostname.get(nombreCrudo) || nombreCrudo,
       online: estado?.online ?? null,
       ip: estado?.ip ?? null,
       grabacionMasAntigua,
