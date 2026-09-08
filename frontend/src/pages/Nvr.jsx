@@ -25,6 +25,19 @@ function isoLocal(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+// Convierte el valor de un <input type="datetime-local"> a ISO UTC,
+// interpretandolo SIEMPRE como hora Argentina (UTC-3) sin importar el huso
+// horario configurado en el sistema operativo del navegador -- si esa
+// configuracion esta mal (PC con otro huso, o mal seteada), el filtro de
+// fechas de Grabaciones quedaba corrido y no encontraba nada, aunque
+// existiera grabacion real en ese horario.
+function argAUtcIso(valorLocal) {
+  const [fecha, hora] = valorLocal.split('T');
+  const [anio, mes, dia] = fecha.split('-').map(Number);
+  const [h, m] = hora.split(':').map(Number);
+  return new Date(Date.UTC(anio, mes - 1, dia, h + 3, m, 0)).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
 // dd-mm-aaaa hh:mm:ss en hora Argentina (UTC-3 fijo, sin horario de
 // verano) -- mismo formato que el script de referencia por fuera de la app.
 function formatearFecha(iso) {
@@ -106,8 +119,8 @@ export default function Nvr() {
     setErrorBuscar('');
     setSegmentos(null);
     try {
-      const desde = new Date(desdeGrab).toISOString().replace(/\.\d{3}Z$/, 'Z');
-      const hasta = new Date(hastaGrab).toISOString().replace(/\.\d{3}Z$/, 'Z');
+      const desde = argAUtcIso(desdeGrab);
+      const hasta = argAUtcIso(hastaGrab);
       const { data } = await client.get(`/grabaciones/buscar/${seleccionado.id}/${canalGrab}`, { params: { desde, hasta } });
       setSegmentos(data);
     } catch (err) {
