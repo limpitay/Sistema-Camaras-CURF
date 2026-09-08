@@ -1,4 +1,5 @@
 const http = require('http');
+const fs = require('fs');
 const crypto = require('crypto');
 const { XMLParser } = require('fast-xml-parser');
 
@@ -201,12 +202,118 @@ async function buscarGrabacionMasAntigua(nvr, canal) {
   return item?.timeSpan?.startTime || null;
 }
 
+// POST /ISAPI/ContentMgmt/search — lista los segmentos de grabacion de un
+// canal en una ventana de tiempo (a diferencia de buscarGrabacionMasAntigua,
+// que solo trae el primero). Cada segmento trae su propio playbackURI, que
+// es lo que despues consume descargarGrabacion.
+async function buscarGrabaciones(nvr, canal, desde, hasta) {
+  const trackId = canal * 100 + 1;
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<CMSearchDescription>
+  <searchID>${crypto.randomUUID().toUpperCase()}</searchID>
+  <trackList>
+    <trackID>${trackId}</trackID>
+  </trackList>
+  <timeSpanList>
+    <timeSpan>
+      <startTime>${desde}</startTime>
+      <endTime>${hasta}</endTime>
+    </timeSpan>
+  </timeSpanList>
+  <contentTypeList>
+    <contentType>video</contentType>
+  </contentTypeList>
+  <maxResults>200</maxResults>
+  <searchResultPostion>0</searchResultPostion>
+  <metadataList>
+    <metadataDescriptor>//metadata.psia.org/VideoMotion</metadataDescriptor>
+  </metadataList>
+</CMSearchDescription>`;
+
+  const data = await isapiXml(nvr, 'POST', '/ISAPI/ContentMgmt/search', body);
+  const resultado = data.CMSearchResult;
+  if (!resultado || resultado.numOfMatches === 0 || resultado.numOfMatches === '0') return [];
+
+  const lista = resultado.matchList?.searchMatchItem;
+  const items = Array.isArray(lista) ? lista : (lista ? [lista] : []);
+  return items.map((item) => {
+    const playbackURI = item.mediaSegmentDescriptor?.playbackURI || null;
+    const tamanoBytes = Number(playbackURI?.match(/[?&]size=(\d+)/)?.[1]) || null;
+    return {
+      inicio: item.timeSpan?.startTime || null,
+      fin: item.timeSpan?.endTime || null,
+      playbackURI,
+      tamanoBytes,
+    };
+  }).filter((s) => s.playbackURI);
+}
+
+// Escribe la respuesta de un pedido directo a un archivo en vez de
+// bufferearla en memoria (las grabaciones pesan cientos de MB/varios GB,
+// nada que quepa comodo en RAM). Devuelve los bytes escritos, o el body de
+// error como texto si el status no es 200.
+function pedidoAArchivo(opciones, body, rutaDestino) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(opciones, (res) => {
+      if (res.statusCode !== 200) {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => resolve({ status: res.statusCode, texto: Buffer.concat(chunks).toString('utf8') }));
+        return;
+      }
+      const destino = fs.createWriteStream(rutaDestino);
+      let bytes = 0;
+      res.on('data', (c) => { bytes += c.length; });
+      res.on('error', reject);
+      destino.on('error', reject);
+      destino.on('finish', () => resolve({ status: res.statusCode, bytes }));
+      res.pipe(destino);
+    });
+    req.on('error', reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+// POST /ISAPI/ContentMgmt/download — descarga un segmento (playbackURI de
+// buscarGrabaciones) directo a disco. El archivo que devuelve el NVR es su
+// contenedor propietario (arranca con la firma "IMKH", no un MP4 estandar
+// puro) aunque se guarde con extension .mp4 -- puede necesitar conversion
+// para reproducirse fuera de las herramientas de Hikvision.
+async function descargarGrabacion(nvr, playbackURI, rutaDestino) {
+  if (!nvr.ip || !nvr.usuario || !nvr.contrasena) {
+    throw new Error(`El NVR "${nvr.hostname}" no tiene IP/usuario/contrasena ISAPI cargados`);
+  }
+  const path = '/ISAPI/ContentMgmt/download';
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<downloadRequest>
+  <playbackURI>${playbackURI.replace(/&/g, '&amp;')}</playbackURI>
+</downloadRequest>`;
+
+  const primera = await pedido({ hostname: nvr.ip, port: 80, path, method: 'POST', headers: {} });
+  if (primera.status !== 401) {
+    throw new Error(`El NVR "${nvr.hostname}" no pidio autenticacion para la descarga (HTTP ${primera.status})`);
+  }
+  const desafio = parsearDesafioDigest(primera.headers['www-authenticate']);
+  if (!desafio) throw new Error(`El NVR "${nvr.hostname}" devolvio 401 sin desafio Digest valido`);
+  const authorization = construirAuthorization({ usuario: nvr.usuario, contrasena: nvr.contrasena, method: 'POST', uri: path, desafio });
+  const headers = { Authorization: authorization, 'Content-Type': 'application/xml', 'Content-Length': Buffer.byteLength(body) };
+
+  const resultado = await pedidoAArchivo({ hostname: nvr.ip, port: 80, path, method: 'POST', headers }, body, rutaDestino);
+  if (resultado.status !== 200) {
+    throw new Error(`El NVR "${nvr.hostname}" respondio HTTP ${resultado.status} al descargar: ${(resultado.texto || '').slice(0, 300)}`);
+  }
+  return resultado.bytes;
+}
+
 module.exports = {
   obtenerInfoDispositivo,
   obtenerEstadoDiscos,
   obtenerEstadoCanales,
   obtenerParametrosVideoCanal,
   buscarGrabacionMasAntigua,
+  buscarGrabaciones,
+  descargarGrabacion,
   // Solo para el script de prueba (_test_isapi.js) mientras se ajustan
   // nombres de campo reales contra el equipo -- no lo usan las rutas.
   isapiXml,

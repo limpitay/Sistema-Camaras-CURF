@@ -39,6 +39,7 @@ app.use('/api/solicitudes', require('./routes/solicitudes'));
 app.use('/api/accesos', require('./routes/accesos'));
 app.use('/api/cuentas-nvr', require('./routes/cuentasNvr'));
 app.use('/api/permisos', require('./routes/permisos'));
+app.use('/api/grabaciones', require('./routes/grabaciones'));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
