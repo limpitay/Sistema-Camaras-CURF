@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import client from '../api/client';
 import Layout from '../components/Layout';
-import { useAuth } from '../context/AuthContext';
 
 // Panel NVR: a diferencia de Recursos > NVR (inventario cargado a mano), esto
 // consulta el equipo en vivo por ISAPI (ver backend/src/utils/isapiClient.js)
@@ -12,30 +11,6 @@ function formatearMb(mb) {
   if (!mb && mb !== 0) return '—';
   const gb = mb / 1024;
   return gb >= 1 ? `${gb.toFixed(1)} GB` : `${mb} MB`;
-}
-
-function formatearBytes(bytes) {
-  if (!bytes && bytes !== 0) return '—';
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-// Valor por defecto para los <input type="datetime-local"> — ahora y hace 24h.
-function isoLocal(date) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-// Convierte el valor de un <input type="datetime-local"> a ISO UTC,
-// interpretandolo SIEMPRE como hora Argentina (UTC-3) sin importar el huso
-// horario configurado en el sistema operativo del navegador -- si esa
-// configuracion esta mal (PC con otro huso, o mal seteada), el filtro de
-// fechas de Grabaciones quedaba corrido y no encontraba nada, aunque
-// existiera grabacion real en ese horario.
-function argAUtcIso(valorLocal) {
-  const [fecha, hora] = valorLocal.split('T');
-  const [anio, mes, dia] = fecha.split('-').map(Number);
-  const [h, m] = hora.split(':').map(Number);
-  return new Date(Date.UTC(anio, mes - 1, dia, h + 3, m, 0)).toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
 // dd-mm-aaaa hh:mm:ss en hora Argentina (UTC-3 fijo, sin horario de
@@ -50,9 +25,6 @@ function formatearFecha(iso) {
 }
 
 export default function Nvr() {
-  const { user } = useAuth();
-  const puedeDescargarGrabaciones = user?.rol === 'admin' || user?.rol === 'avanzado';
-
   const [nvrs, setNvrs] = useState([]);
   const [seleccionado, setSeleccionado] = useState(null);
   const [estado, setEstado] = useState(null);
@@ -62,23 +34,7 @@ export default function Nvr() {
   const [errorEstado, setErrorEstado] = useState('');
   const [errorCanales, setErrorCanales] = useState('');
 
-  const [canalGrab, setCanalGrab] = useState('');
-  const [desdeGrab, setDesdeGrab] = useState(() => isoLocal(new Date(Date.now() - 24 * 60 * 60 * 1000)));
-  const [hastaGrab, setHastaGrab] = useState(() => isoLocal(new Date()));
-  const [segmentos, setSegmentos] = useState(null);
-  const [cargandoBuscar, setCargandoBuscar] = useState(false);
-  const [errorBuscar, setErrorBuscar] = useState('');
-  const [descargando, setDescargando] = useState(null);
-  const [archivos, setArchivos] = useState([]);
-  const [errorArchivos, setErrorArchivos] = useState('');
-
   useEffect(() => { client.get('/nvrs').then((res) => setNvrs(res.data)); }, []);
-
-  const cargarArchivos = () => {
-    if (!puedeDescargarGrabaciones) return;
-    client.get('/grabaciones').then((res) => setArchivos(res.data)).catch(() => {});
-  };
-  useEffect(cargarArchivos, [puedeDescargarGrabaciones]);
 
   const elegir = (nvr) => {
     setSeleccionado(nvr);
@@ -112,53 +68,6 @@ export default function Nvr() {
     } finally {
       setCargandoCanales(false);
     }
-  };
-
-  const buscarSegmentos = async () => {
-    setCargandoBuscar(true);
-    setErrorBuscar('');
-    setSegmentos(null);
-    try {
-      const desde = argAUtcIso(desdeGrab);
-      const hasta = argAUtcIso(hastaGrab);
-      const { data } = await client.get(`/grabaciones/buscar/${seleccionado.id}/${canalGrab}`, { params: { desde, hasta } });
-      setSegmentos(data);
-    } catch (err) {
-      setErrorBuscar(err.response?.data?.error || 'No se pudo buscar grabaciones.');
-    } finally {
-      setCargandoBuscar(false);
-    }
-  };
-
-  const traerSegmento = async (segmento, idx) => {
-    setDescargando(idx);
-    try {
-      await client.post(`/grabaciones/traer/${seleccionado.id}/${canalGrab}`, {
-        playbackURI: segmento.playbackURI,
-        inicio: segmento.inicio,
-      }, { timeout: 30 * 60 * 1000 });
-      cargarArchivos();
-    } catch (err) {
-      window.alert(err.response?.data?.error || 'No se pudo descargar el segmento.');
-    } finally {
-      setDescargando(null);
-    }
-  };
-
-  const bajarArchivo = async (nombre) => {
-    const res = await client.get(`/grabaciones/${encodeURIComponent(nombre)}`, { responseType: 'blob', timeout: 30 * 60 * 1000 });
-    const url = URL.createObjectURL(res.data);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = nombre;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const borrarArchivo = async (nombre) => {
-    if (!window.confirm(`Borrar ${nombre} del servidor?`)) return;
-    await client.delete(`/grabaciones/${encodeURIComponent(nombre)}`);
-    cargarArchivos();
   };
 
   return (
@@ -324,112 +233,6 @@ export default function Nvr() {
                   </p>
                 </div>
               </div>
-
-              {puedeDescargarGrabaciones && (
-                <div className="card shadow-sm">
-                  <div className="card-header">
-                    <span className="fw-semibold">Grabaciones</span>
-                    <span className="badge text-bg-warning ms-2">Temporal</span>
-                  </div>
-                  <div className="card-body">
-                    <p className="small text-body-secondary">
-                      Trae clips puntuales del NVR al servidor para descargarlos. El archivo que devuelve el equipo es
-                      su formato propietario (aunque se guarde como .mp4) — puede necesitar conversion para
-                      reproducirse fuera de las herramientas de Hikvision. Cada segmento puede pesar varios cientos de
-                      MB o mas de 1 GB.
-                    </p>
-                    <div className="row g-2 align-items-end mb-3">
-                      <div className="col-6 col-md-2">
-                        <label className="form-label small mb-1">Canal</label>
-                        <input type="number" min="1" className="form-control form-control-sm" value={canalGrab} onChange={(e) => setCanalGrab(e.target.value)} />
-                      </div>
-                      <div className="col-6 col-md-3">
-                        <label className="form-label small mb-1">Desde</label>
-                        <input type="datetime-local" className="form-control form-control-sm" value={desdeGrab} onChange={(e) => setDesdeGrab(e.target.value)} />
-                      </div>
-                      <div className="col-6 col-md-3">
-                        <label className="form-label small mb-1">Hasta</label>
-                        <input type="datetime-local" className="form-control form-control-sm" value={hastaGrab} onChange={(e) => setHastaGrab(e.target.value)} />
-                      </div>
-                      <div className="col-6 col-md-2">
-                        <button type="button" className="btn btn-sm btn-outline-secondary w-100" disabled={!canalGrab || cargandoBuscar} onClick={buscarSegmentos}>
-                          {cargandoBuscar ? 'Buscando...' : 'Buscar'}
-                        </button>
-                      </div>
-                    </div>
-
-                    {errorBuscar && <div className="alert alert-danger py-2">{errorBuscar}</div>}
-
-                    {segmentos && (
-                      <div className="table-responsive mb-3">
-                        <table className="table table-sm align-middle">
-                          <thead>
-                            <tr>
-                              <th>Desde</th>
-                              <th>Hasta</th>
-                              <th>Tamano</th>
-                              <th></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {segmentos.map((s, idx) => (
-                              <tr key={idx}>
-                                <td className="small">{formatearFecha(s.inicio)}</td>
-                                <td className="small">{formatearFecha(s.fin)}</td>
-                                <td className="small">{formatearBytes(s.tamanoBytes)}</td>
-                                <td>
-                                  <button
-                                    type="button"
-                                    className="btn btn-sm btn-outline-primary"
-                                    disabled={descargando === idx}
-                                    onClick={() => traerSegmento(s, idx)}
-                                  >
-                                    {descargando === idx ? 'Trayendo...' : 'Traer al servidor'}
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                            {segmentos.length === 0 && (
-                              <tr><td colSpan={4} className="text-body-secondary small">Sin grabaciones en ese rango.</td></tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-
-                    <h3 className="h6 fw-semibold">Archivos en el servidor</h3>
-                    {errorArchivos && <div className="alert alert-danger py-2">{errorArchivos}</div>}
-                    <div className="table-responsive">
-                      <table className="table table-sm align-middle mb-0">
-                        <thead>
-                          <tr>
-                            <th>Archivo</th>
-                            <th>Tamano</th>
-                            <th>Creado</th>
-                            <th></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {archivos.map((a) => (
-                            <tr key={a.nombre}>
-                              <td className="small">{a.nombre}</td>
-                              <td className="small">{formatearBytes(a.bytes)}</td>
-                              <td className="small">{formatearFecha(a.creado)}</td>
-                              <td className="text-end">
-                                <button type="button" className="btn btn-sm btn-outline-secondary me-1" onClick={() => bajarArchivo(a.nombre)}>Bajar</button>
-                                <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => borrarArchivo(a.nombre)}>Borrar</button>
-                              </td>
-                            </tr>
-                          ))}
-                          {archivos.length === 0 && (
-                            <tr><td colSpan={4} className="text-body-secondary small">Sin archivos descargados todavia.</td></tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
