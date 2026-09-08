@@ -16,7 +16,7 @@ function formatearMb(mb) {
 
 function formatearBytes(bytes) {
   if (!bytes && bytes !== 0) return '—';
-  return formatearMb(bytes / (1024 * 1024));
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 // Valor por defecto para los <input type="datetime-local"> — ahora y hace 24h.
