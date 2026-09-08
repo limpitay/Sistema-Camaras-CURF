@@ -183,54 +183,54 @@ export default function Nvr() {
                       antigua — puede tardar, un pedido por canal.
                     </div>
                   )}
-                  {canales && (
-                    <div className="table-responsive">
-                      <table className="table table-sm align-middle mb-0">
-                        <thead>
-                          <tr>
-                            <th>Canal</th>
-                            <th>Camara</th>
-                            <th>Descripcion</th>
-                            <th>Estado</th>
-                            <th>IP</th>
-                            <th>Grabacion mas antigua</th>
-                            <th>Dias disponibles</th>
-                            <th>Usado (aproximado)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {canales.map((c) => (
-                            <tr key={c.canal}>
-                              <td>{c.canal}</td>
-                              <td>{c.camara ? (c.camara.descripcion || c.camara.hostname) : <span className="text-body-secondary">sin asignar</span>}</td>
-                              <td className="small">{c.descripcion || '—'}</td>
-                              <td>
-                                {c.online === null ? '—' : (
-                                  <span className={`badge ${c.online ? 'text-bg-success' : 'text-bg-secondary'}`}>{c.online ? 'Online' : 'Offline'}</span>
-                                )}
-                              </td>
-                              <td className="small text-body-secondary">{c.ip || '—'}</td>
-                              <td>{c.error ? <span className="text-danger small">{c.error}</span> : formatearFecha(c.grabacionMasAntigua)}</td>
-                              <td>{c.diasDisponibles ?? '—'}</td>
-                              <td>{c.gbEstimado != null ? `~${c.gbEstimado.toFixed(1)} GB` : '—'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        {canales.some((c) => c.gbEstimado != null) && (
-                          <tfoot>
-                            <tr className="fw-semibold">
-                              <td colSpan={6} className="text-end">Total usado (aproximado)</td>
-                              <td>~{canales.reduce((acc, c) => acc + (c.gbEstimado || 0), 0).toFixed(0)} GB</td>
-                            </tr>
-                          </tfoot>
-                        )}
-                      </table>
-                    </div>
-                  )}
-                  <p className="small text-body-secondary mt-2 mb-0">
-                    El almacenamiento es una estimacion (bitrate maximo configurado x dias grabados), no el consumo
-                    real medido por el NVR — no existe ese endpoint en modo overwrite/pool compartido.
-                  </p>
+                  {canales && (() => {
+                    const ocupados = canales.filter((c) => c.online === true).length;
+                    const disponibles = canales.length - ocupados;
+                    const pct = canales.length ? Math.round((ocupados / canales.length) * 100) : 0;
+                    return (
+                      <>
+                        <div className="d-flex align-items-center gap-3 mb-3">
+                          <span className="badge text-bg-success">{ocupados} ocupados</span>
+                          <span className="badge text-bg-secondary">{disponibles} disponibles</span>
+                          <div className="progress flex-grow-1" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} style={{ height: 8 }}>
+                            <div className="progress-bar" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                        <div className="table-responsive">
+                          <table className="table table-sm align-middle mb-0">
+                            <thead>
+                              <tr>
+                                <th>Canal</th>
+                                <th>Camara</th>
+                                <th>Descripcion</th>
+                                <th>Estado</th>
+                                <th>IP</th>
+                                <th>Grabacion mas antigua</th>
+                                <th>Dias disponibles</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {canales.map((c) => (
+                                <tr key={c.canal}>
+                                  <td>{c.canal}</td>
+                                  <td>{c.camara ? (c.camara.descripcion || c.camara.hostname) : <span className="text-body-secondary">sin asignar</span>}</td>
+                                  <td className="small">{c.descripcion || '—'}</td>
+                                  <td>
+                                    {c.online === null ? '—' : (
+                                      <span className={`badge ${c.online ? 'text-bg-success' : 'text-bg-secondary'}`}>{c.online ? 'Online' : 'Offline'}</span>
+                                    )}
+                                  </td>
+                                  <td className="small text-body-secondary">{c.ip || '—'}</td>
+                                  <td>{c.error ? <span className="text-danger small">{c.error}</span> : formatearFecha(c.grabacionMasAntigua)}</td>
+                                  <td>{c.diasDisponibles ?? '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

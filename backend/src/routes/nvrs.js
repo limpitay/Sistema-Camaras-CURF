@@ -3,7 +3,7 @@ const db = require('../db');
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
 const {
-  obtenerInfoDispositivo, obtenerEstadoDiscos, obtenerEstadoCanales, obtenerNombresCanales, obtenerParametrosVideoCanal, buscarGrabacionMasAntigua,
+  obtenerInfoDispositivo, obtenerEstadoDiscos, obtenerEstadoCanales, obtenerNombresCanales, buscarGrabacionMasAntigua,
 } = require('../utils/isapiClient');
 
 const router = express.Router();
@@ -184,11 +184,6 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
   for (let canal = 1; canal <= nvr.canales_totales; canal += 1) {
     const estado = estadoPorCanal.get(canal) || null;
 
-    let video = null;
-    try {
-      video = await obtenerParametrosVideoCanal(nvr, canal);
-    } catch { /* canal sin stream configurado (ej. sin camara conectada) */ }
-
     let grabacionMasAntigua = null;
     let error = null;
     try {
@@ -197,14 +192,7 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
       error = err.message;
     }
     const diasDisponibles = grabacionMasAntigua
-      ? (Date.now() - new Date(grabacionMasAntigua).getTime()) / 86400000
-      : null;
-    // Estimacion de espacio ocupado (no hay endpoint que devuelva el consumo
-    // real en modo overwrite/pool compartido): bitrate maximo configurado *
-    // dias grabados, mismo criterio que ya se uso en un script de prueba
-    // aparte (0.0103 = KB/s a GB/dia: 1 kbps * 86400s / 8 / 1024^2).
-    const gbEstimado = video?.bitrateMaxKbps && diasDisponibles
-      ? video.bitrateMaxKbps * 0.0103 * diasDisponibles
+      ? Math.floor((Date.now() - new Date(grabacionMasAntigua).getTime()) / 86400000)
       : null;
 
     canales.push({
@@ -213,10 +201,8 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
       descripcion: nombrePorCanal.get(canal) || null,
       online: estado?.online ?? null,
       ip: estado?.ip ?? null,
-      video,
-      gbEstimado,
       grabacionMasAntigua,
-      diasDisponibles: diasDisponibles != null ? Math.floor(diasDisponibles) : null,
+      diasDisponibles,
       error,
     });
   }
