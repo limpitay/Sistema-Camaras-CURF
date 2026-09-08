@@ -142,6 +142,16 @@ async function obtenerEstadoCanales(nvr) {
   }));
 }
 
+// GET /ISAPI/ContentMgmt/InputProxy/channels — nombre configurado de cada
+// canal (el mismo que se ve en HikCentral > Dispositivo > Camara > Nombre;
+// se carga/edita ahi o en el propio NVR, esto solo lo lee).
+async function obtenerNombresCanales(nvr) {
+  const data = await isapiXml(nvr, 'GET', '/ISAPI/ContentMgmt/InputProxy/channels');
+  const lista = data.InputProxyChannelList?.InputProxyChannel;
+  const canales = Array.isArray(lista) ? lista : (lista ? [lista] : []);
+  return canales.map((c) => ({ canal: Number(c.id), nombre: c.name || null }));
+}
+
 // GET /ISAPI/Streaming/channels/<canal*100+1> — resolucion/codec/bitrate real
 // configurado en el stream principal de un canal. System/Video/inputs/channels
 // (la fuente "oficial" para esto) da 403 en NVRs 100% IP como este, que no
@@ -310,6 +320,7 @@ module.exports = {
   obtenerInfoDispositivo,
   obtenerEstadoDiscos,
   obtenerEstadoCanales,
+  obtenerNombresCanales,
   obtenerParametrosVideoCanal,
   buscarGrabacionMasAntigua,
   buscarGrabaciones,

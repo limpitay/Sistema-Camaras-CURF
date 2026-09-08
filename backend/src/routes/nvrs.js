@@ -3,7 +3,7 @@ const db = require('../db');
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
 const {
-  obtenerInfoDispositivo, obtenerEstadoDiscos, obtenerEstadoCanales, obtenerParametrosVideoCanal, buscarGrabacionMasAntigua,
+  obtenerInfoDispositivo, obtenerEstadoDiscos, obtenerEstadoCanales, obtenerNombresCanales, obtenerParametrosVideoCanal, buscarGrabacionMasAntigua,
 } = require('../utils/isapiClient');
 
 const router = express.Router();
@@ -169,6 +169,14 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
     return res.status(502).json({ error: `No se pudo consultar el estado de canales del NVR: ${err.message}` });
   }
 
+  // Nombre configurado en HikCentral/el propio NVR (no en la base local) —
+  // si falla no bloquea el resto, es un dato de mas, no critico como el
+  // estado online/offline.
+  let nombrePorCanal = new Map();
+  try {
+    nombrePorCanal = new Map((await obtenerNombresCanales(nvr)).map((c) => [c.canal, c.nombre]));
+  } catch { /* seguimos sin nombre si falla */ }
+
   // Secuencial, no en paralelo: los NVR embebidos limitan cuantas sesiones
   // HTTP/ISAPI concurrentes aceptan, y bombardearlos con 16-32 pedidos a la
   // vez hace que empiecen a rechazar conexiones.
@@ -202,6 +210,7 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
     canales.push({
       canal,
       camara: camarasPorCanal.get(canal) || (estado?.ip ? camarasPorIp.get(estado.ip) : null) || null,
+      descripcion: nombrePorCanal.get(canal) || null,
       online: estado?.online ?? null,
       ip: estado?.ip ?? null,
       video,

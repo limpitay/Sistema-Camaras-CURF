@@ -281,6 +281,7 @@ export default function Nvr() {
                           <tr>
                             <th>Canal</th>
                             <th>Camara</th>
+                            <th>Descripcion</th>
                             <th>Estado</th>
                             <th>IP</th>
                             <th>Grabacion mas antigua</th>
@@ -293,6 +294,7 @@ export default function Nvr() {
                             <tr key={c.canal}>
                               <td>{c.canal}</td>
                               <td>{c.camara ? (c.camara.descripcion || c.camara.hostname) : <span className="text-body-secondary">sin asignar</span>}</td>
+                              <td className="small">{c.descripcion || '—'}</td>
                               <td>
                                 {c.online === null ? '—' : (
                                   <span className={`badge ${c.online ? 'text-bg-success' : 'text-bg-secondary'}`}>{c.online ? 'Online' : 'Offline'}</span>
@@ -308,7 +310,7 @@ export default function Nvr() {
                         {canales.some((c) => c.gbEstimado != null) && (
                           <tfoot>
                             <tr className="fw-semibold">
-                              <td colSpan={5} className="text-end">Total usado (aproximado)</td>
+                              <td colSpan={6} className="text-end">Total usado (aproximado)</td>
                               <td>~{canales.reduce((acc, c) => acc + (c.gbEstimado || 0), 0).toFixed(0)} GB</td>
                             </tr>
                           </tfoot>
