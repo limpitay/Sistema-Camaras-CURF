@@ -34,7 +34,33 @@ export default function Nvr() {
   const [errorEstado, setErrorEstado] = useState('');
   const [errorCanales, setErrorCanales] = useState('');
 
+  const [camarasLive, setCamarasLive] = useState(null);
+  const [erroresLive, setErroresLive] = useState([]);
+  const [cargandoLive, setCargandoLive] = useState(false);
+  const [errorLive, setErrorLive] = useState('');
+  const [busquedaLive, setBusquedaLive] = useState('');
+
   useEffect(() => { client.get('/nvrs').then((res) => setNvrs(res.data)); }, []);
+
+  const consultarCamarasLive = async () => {
+    setCargandoLive(true);
+    setErrorLive('');
+    try {
+      const { data } = await client.get('/nvrs/camaras-en-vivo');
+      setCamarasLive(data.camaras);
+      setErroresLive(data.errores || []);
+    } catch (err) {
+      setErrorLive(err.response?.data?.error || 'No se pudo consultar las camaras.');
+    } finally {
+      setCargandoLive(false);
+    }
+  };
+
+  const camarasLiveFiltradas = (camarasLive || []).filter((c) => {
+    if (!busquedaLive.trim()) return true;
+    const q = busquedaLive.trim().toLowerCase();
+    return [c.nvr, c.hostname, c.descripcion, c.ip].some((v) => (v || '').toLowerCase().includes(q));
+  });
 
   const elegir = (nvr) => {
     setSeleccionado(nvr);
@@ -234,6 +260,77 @@ export default function Nvr() {
                 </div>
               </div>
             </div>
+          )}
+        </div>
+      </div>
+
+      <div className="card shadow-sm mt-3">
+        <div className="card-header d-flex justify-content-between align-items-center">
+          <span className="fw-semibold">Camaras (en vivo — todos los NVR)</span>
+          <button type="button" className="btn btn-sm btn-outline-secondary" disabled={cargandoLive} onClick={consultarCamarasLive}>
+            {cargandoLive ? 'Consultando...' : 'Actualizar'}
+          </button>
+        </div>
+        <div className="card-body">
+          {errorLive && <div className="alert alert-danger py-2">{errorLive}</div>}
+          {!camarasLive && !errorLive && (
+            <div className="text-body-secondary small">
+              Recorre todos los NVR con login ISAPI cargado — puede tardar varios segundos.
+            </div>
+          )}
+          {camarasLive && (
+            <>
+              {erroresLive.length > 0 && (
+                <div className="alert alert-warning py-2 small mb-3">
+                  No se pudieron consultar {erroresLive.length} NVR:
+                  <ul className="mb-0">
+                    {erroresLive.map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                </div>
+              )}
+              <input
+                className="form-control form-control-sm mb-3"
+                style={{ maxWidth: 320 }}
+                placeholder="Buscar por hostname, descripcion, IP o NVR..."
+                value={busquedaLive}
+                onChange={(e) => setBusquedaLive(e.target.value)}
+              />
+              <div className="table-responsive">
+                <table className="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>NVR</th>
+                      <th>Canal</th>
+                      <th>Hostname</th>
+                      <th>Descripcion</th>
+                      <th>IP</th>
+                      <th>Marca</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {camarasLiveFiltradas.map((c) => (
+                      <tr key={`${c.nvrId}-${c.canal}`}>
+                        <td className="small text-body-secondary">{c.nvr}</td>
+                        <td>{c.canal}</td>
+                        <td className="small">{c.hostname || '—'}</td>
+                        <td className="small">{c.descripcion || '—'}</td>
+                        <td className="small text-body-secondary">{c.ip || '—'}</td>
+                        <td className="small">{c.marca}</td>
+                        <td>
+                          {c.online === null ? '—' : (
+                            <span className={`badge ${c.online ? 'text-bg-success' : 'text-bg-secondary'}`}>{c.online ? 'Online' : 'Offline'}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {camarasLiveFiltradas.length === 0 && (
+                      <tr><td colSpan={7} className="text-body-secondary small">Sin resultados.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </div>

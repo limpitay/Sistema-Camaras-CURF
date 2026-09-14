@@ -39,6 +39,73 @@ router.get('/', auth, (req, res) => {
   res.json(filas.map((row) => seleccionarCampos(row, req.user.rol)));
 });
 
+// El nombre "de verdad" (curado, el que se ve en HikCentral > Dispositivo >
+// Camara > Nombre) no vive en el NVR -- HikCentral lo devuelve como
+// "<nombre curado> (<hostname crudo>)", asi que se cruza por ese hostname
+// crudo entre parentesis contra el nombre que da el NVR por ISAPI. Si
+// Artemis no esta configurado o falla, se sigue con el nombre crudo nomas.
+async function obtenerDescripcionPorHostname() {
+  try {
+    const camarasArtemis = await listarCamarasArtemis();
+    return new Map(
+      camarasArtemis
+        .map((c) => [c.cameraName?.match(/\(([^)]+)\)\s*$/)?.[1], c.cameraName])
+        .filter(([hostname]) => hostname)
+    );
+  } catch {
+    return new Map();
+  }
+}
+
+// GET /api/nvrs/camaras-en-vivo — Panel NVR: junta los canales de TODOS los
+// NVR con login ISAPI cargado en una sola lista (hostname/IP/marca/estado en
+// vivo), espejo liviano de Recursos > Camaras pero consultando el equipo
+// real en vez del inventario local. Registrada antes de "/:id" a proposito
+// -- si no, Express la matchearia como si "camaras-en-vivo" fuera un :id.
+router.get('/camaras-en-vivo', auth, requireRole('admin', 'avanzado', 'sistemas_lectura'), async (req, res) => {
+  const nvrs = db.prepare(
+    'SELECT * FROM nvrs WHERE ip IS NOT NULL AND usuario IS NOT NULL AND contrasena IS NOT NULL AND canales_totales IS NOT NULL'
+  ).all();
+
+  const descripcionPorHostname = await obtenerDescripcionPorHostname();
+
+  const camaras = [];
+  const errores = [];
+  // Secuencial entre NVR y entre canales: son equipos embebidos, bombardear
+  // varios a la vez (o varios canales del mismo NVR) los hace rechazar
+  // conexiones -- ver mismo criterio en /:id/canales.
+  for (const nvr of nvrs) {
+    let estadoPorCanal;
+    try {
+      estadoPorCanal = new Map((await obtenerEstadoCanales(nvr)).map((c) => [c.canal, c]));
+    } catch (err) {
+      errores.push(`${nvr.hostname}: ${err.message}`);
+      continue;
+    }
+    let nombrePorCanal = new Map();
+    try {
+      nombrePorCanal = new Map((await obtenerNombresCanales(nvr)).map((c) => [c.canal, c.nombre]));
+    } catch { /* seguimos sin nombre si falla */ }
+
+    for (let canal = 1; canal <= nvr.canales_totales; canal += 1) {
+      const estado = estadoPorCanal.get(canal) || null;
+      const nombreCrudo = nombrePorCanal.get(canal) || null;
+      camaras.push({
+        nvrId: nvr.id,
+        nvr: nvr.hostname,
+        canal,
+        hostname: nombreCrudo,
+        ip: estado?.ip ?? null,
+        marca: 'Hikvision',
+        online: estado?.online ?? null,
+        descripcion: descripcionPorHostname.get(nombreCrudo) || nombreCrudo,
+      });
+    }
+  }
+
+  res.json({ camaras, errores, nvrsConsultados: nvrs.length });
+});
+
 // GET /api/nvrs/:id — incluye el detalle de las camaras asociadas
 router.get('/:id', auth, (req, res) => {
   const nvr = db.prepare(`${SELECT_BASE} WHERE n.id = ?`).get(req.params.id);
@@ -178,20 +245,7 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
     nombrePorCanal = new Map((await obtenerNombresCanales(nvr)).map((c) => [c.canal, c.nombre]));
   } catch { /* seguimos sin nombre si falla */ }
 
-  // El nombre "de verdad" (curado, el que se ve en HikCentral > Dispositivo >
-  // Camara > Nombre) no vive en el NVR -- HikCentral lo devuelve como
-  // "<nombre curado> (<hostname crudo>)", asi que cruzamos por ese hostname
-  // crudo entre parentesis contra el nombre de arriba. Opcional: si Artemis
-  // no esta configurado o falla, se sigue mostrando el nombre crudo del NVR.
-  let descripcionPorHostname = new Map();
-  try {
-    const camarasArtemis = await listarCamarasArtemis();
-    descripcionPorHostname = new Map(
-      camarasArtemis
-        .map((c) => [c.cameraName?.match(/\(([^)]+)\)\s*$/)?.[1], c.cameraName])
-        .filter(([hostname]) => hostname)
-    );
-  } catch { /* seguimos con el nombre crudo del NVR si Artemis no responde */ }
+  const descripcionPorHostname = await obtenerDescripcionPorHostname();
 
   // Secuencial, no en paralelo: los NVR embebidos limitan cuantas sesiones
   // HTTP/ISAPI concurrentes aceptan, y bombardearlos con 16-32 pedidos a la
