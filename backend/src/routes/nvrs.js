@@ -43,6 +43,30 @@ function gbDiaDesdeBitrate(bitrateMaxKbps) {
   return (bitrateMaxKbps * 1000 / 8 * 86400) / 1e9;
 }
 
+// Cache compartido del Panel NVR (migracion 029): lo que trae un "Actualizar"
+// se guarda aca para que cualquier usuario que entre despues lo vea tal cual
+// quedo, sin pegarle de nuevo al NVR -- estos equipos no bancan que cada
+// usuario que abre la pantalla dispare su propia tanda de pedidos ISAPI.
+// estado_json y canales_json se pisan cada uno por separado (el panel siempre
+// pide primero /estado y despues /canales, nunca al reves).
+function guardarEstadoSnapshot(nvrId, estado, actualizadoPor) {
+  db.prepare(`
+    INSERT INTO nvr_snapshots (nvr_id, estado_json, canales_json, actualizado_en, actualizado_por)
+    VALUES (?, ?, 'null', ?, ?)
+    ON CONFLICT (nvr_id) DO UPDATE SET estado_json = excluded.estado_json,
+      actualizado_en = excluded.actualizado_en, actualizado_por = excluded.actualizado_por
+  `).run(nvrId, JSON.stringify(estado), new Date().toISOString(), actualizadoPor || null);
+}
+
+function guardarCanalesSnapshot(nvrId, canales, actualizadoPor) {
+  db.prepare(`
+    INSERT INTO nvr_snapshots (nvr_id, estado_json, canales_json, actualizado_en, actualizado_por)
+    VALUES (?, 'null', ?, ?, ?)
+    ON CONFLICT (nvr_id) DO UPDATE SET canales_json = excluded.canales_json,
+      actualizado_en = excluded.actualizado_en, actualizado_por = excluded.actualizado_por
+  `).run(nvrId, JSON.stringify(canales), new Date().toISOString(), actualizadoPor || null);
+}
+
 // GET /api/nvrs
 router.get('/', auth, (req, res) => {
   const filas = db.prepare(`${SELECT_BASE} ORDER BY n.hostname`).all();
@@ -114,6 +138,24 @@ router.get('/camaras-en-vivo', auth, requireRole('admin', 'avanzado', 'sistemas_
   }
 
   res.json({ camaras, errores, nvrsConsultados: nvrs.length });
+});
+
+// GET /api/nvrs/snapshots — Panel NVR: el cache compartido de cada NVR (ver
+// nvr_snapshots / guardarEstadoSnapshot / guardarCanalesSnapshot), para
+// pintar la pantalla al instante al entrar sin consultar ningun equipo real.
+// Registrada antes de "/:id" por el mismo motivo que "/camaras-en-vivo".
+router.get('/snapshots', auth, requireRole('admin', 'avanzado', 'sistemas_lectura'), (req, res) => {
+  const filas = db.prepare('SELECT * FROM nvr_snapshots').all();
+  const porNvr = {};
+  for (const fila of filas) {
+    porNvr[fila.nvr_id] = {
+      estado: JSON.parse(fila.estado_json),
+      canales: JSON.parse(fila.canales_json),
+      actualizadoEn: fila.actualizado_en,
+      actualizadoPor: fila.actualizado_por,
+    };
+  }
+  res.json(porNvr);
 });
 
 // GET /api/nvrs/:id — incluye el detalle de las camaras asociadas
@@ -215,7 +257,9 @@ router.get('/:id/estado', auth, requireRole('admin', 'avanzado', 'sistemas_lectu
 
   try {
     const [dispositivo, discos] = await Promise.all([obtenerInfoDispositivo(nvr), obtenerEstadoDiscos(nvr)]);
-    res.json({ dispositivo, discos });
+    const estado = { dispositivo, discos };
+    guardarEstadoSnapshot(nvr.id, estado, req.user.nombre);
+    res.json(estado);
   } catch (err) {
     res.status(502).json({ error: `No se pudo consultar el NVR: ${err.message}` });
   }
@@ -299,6 +343,7 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
     });
   }
 
+  guardarCanalesSnapshot(nvr.id, canales, req.user.nombre);
   res.json(canales);
 });
 

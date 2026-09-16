@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import client from '../api/client';
 import Layout from '../components/Layout';
+import { useAuth } from '../context/AuthContext';
 import { quitarAcentos } from '../utils/texto';
 
 // Panel NVR: a diferencia de Recursos > NVR (inventario cargado a mano), esto
@@ -231,19 +232,26 @@ function CalculadoraRetencion({ nvrs, detallePorNvr }) {
 }
 
 export default function Nvr() {
+  const { user } = useAuth();
   const [nvrs, setNvrs] = useState([]);
   const [detallePorNvr, setDetallePorNvr] = useState({});
   const [cargandoTodo, setCargandoTodo] = useState(false);
   const [progreso, setProgreso] = useState(null);
   const [erroresActualizacion, setErroresActualizacion] = useState([]);
-  const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
   const [abiertas, setAbiertas] = useState({});
   const [cargandoUno, setCargandoUno] = useState({});
   const [busqueda, setBusqueda] = useState('');
   const [busquedaAbierta, setBusquedaAbierta] = useState(false);
   const busquedaRef = useRef(null);
 
-  useEffect(() => { client.get('/nvrs').then((res) => setNvrs(res.data)); }, []);
+  // El cache compartido (/nvrs/snapshots) trae lo ultimo que alguien haya
+  // actualizado -- pinta la pantalla al toque, sin pegarle a ningun NVR real
+  // solo por entrar. "Actualizar"/"Actualizar todo" son los unicos gatillos
+  // de una consulta en vivo, y esa consulta pisa el cache para todos.
+  useEffect(() => {
+    client.get('/nvrs').then((res) => setNvrs(res.data));
+    client.get('/nvrs/snapshots').then((res) => setDetallePorNvr((prev) => ({ ...prev, ...res.data })));
+  }, []);
 
   useEffect(() => {
     const alClickear = (e) => {
@@ -253,20 +261,30 @@ export default function Nvr() {
     return () => document.removeEventListener('click', alClickear);
   }, []);
 
+  // En exito devuelve el snapshot nuevo completo; en error devuelve solo el
+  // error, sin tocar estado/canales -- asi una consulta fallida no borra el
+  // ultimo dato bueno que ya estaba en pantalla (compartido con el resto de
+  // los usuarios via /nvrs/snapshots, ver backend).
   const consultarUno = async (nvr) => {
     try {
       const estadoRes = await client.get(`/nvrs/${nvr.id}/estado`);
       const canalesRes = nvr.canales_totales ? await client.get(`/nvrs/${nvr.id}/canales`) : { data: [] };
-      return { estado: estadoRes.data, canales: canalesRes.data, error: null, actualizadoEn: new Date().toISOString() };
+      return {
+        estado: estadoRes.data,
+        canales: canalesRes.data,
+        error: null,
+        actualizadoEn: new Date().toISOString(),
+        actualizadoPor: user?.nombre || null,
+      };
     } catch (err) {
-      return { estado: null, canales: null, error: err.response?.data?.error || err.message || 'Error desconocido', actualizadoEn: null };
+      return { error: err.response?.data?.error || err.message || 'Error desconocido' };
     }
   };
 
   const actualizarUno = async (nvr) => {
     setCargandoUno((prev) => ({ ...prev, [nvr.id]: true }));
-    const detalle = await consultarUno(nvr);
-    setDetallePorNvr((prev) => ({ ...prev, [nvr.id]: detalle }));
+    const resultado = await consultarUno(nvr);
+    setDetallePorNvr((prev) => ({ ...prev, [nvr.id]: { ...prev[nvr.id], ...resultado } }));
     setCargandoUno((prev) => ({ ...prev, [nvr.id]: false }));
   };
 
@@ -280,17 +298,24 @@ export default function Nvr() {
     for (let i = 0; i < nvrs.length; i += 1) {
       const nvr = nvrs[i];
       setProgreso({ actual: i + 1, total: nvrs.length, hostname: nvr.hostname });
-      const detalle = await consultarUno(nvr);
-      if (detalle.error) errores.push(`${nvr.hostname}: ${detalle.error}`);
-      setDetallePorNvr((prev) => ({ ...prev, [nvr.id]: detalle }));
+      const resultado = await consultarUno(nvr);
+      if (resultado.error) errores.push(`${nvr.hostname}: ${resultado.error}`);
+      setDetallePorNvr((prev) => ({ ...prev, [nvr.id]: { ...prev[nvr.id], ...resultado } }));
     }
     setErroresActualizacion(errores);
-    setUltimaActualizacion(new Date().toISOString());
     setProgreso(null);
     setCargandoTodo(false);
   };
 
   const toggleCard = (id) => setAbiertas((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  // Derivada del cache, no de esta sesion -- si otro usuario actualizo un
+  // NVR hace un rato, la fecha tiene que reflejar eso aunque yo nunca haya
+  // tocado "Actualizar".
+  const ultimaActualizacion = useMemo(() => {
+    const fechas = Object.values(detallePorNvr).map((d) => d?.actualizadoEn).filter(Boolean);
+    return fechas.length ? fechas.reduce((a, b) => (a > b ? a : b)) : null;
+  }, [detallePorNvr]);
 
   const resumen = useMemo(() => {
     let canalesInstalados = 0;
@@ -482,7 +507,9 @@ export default function Nvr() {
                   <div className="card-body">
                     <div className="d-flex justify-content-between align-items-center mb-3">
                       <span className="small text-body-secondary">
-                        {detalle?.actualizadoEn ? `Actualizado ${formatearFecha(detalle.actualizadoEn)}` : 'Sin consultar en esta sesion'}
+                        {detalle?.actualizadoEn
+                          ? `Actualizado ${formatearFecha(detalle.actualizadoEn)}${detalle.actualizadoPor ? ` por ${detalle.actualizadoPor}` : ''}`
+                          : 'Sin actualizar todavia -- nadie lo consulto aun'}
                       </span>
                       <button
                         type="button"
