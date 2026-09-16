@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import client from '../api/client';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
+import { quitarAcentos } from '../utils/texto';
 
 const ROLES_USUARIO = ['admin', 'avanzado', 'sistemas_lectura', 'direccion', 'mando_medio'];
 const PASSWORD_MIN = 8;
@@ -11,13 +12,7 @@ const PASSWORD_MIN = 8;
 // "llimpitay", "Daniela Vega" → "dvega"). Es solo una sugerencia editable,
 // no se fuerza — un admin puede escribir cualquier otra cosa en el campo.
 function sugerirUsuario(nombre) {
-  // Quita marcas diacriticas (tildes, dieresis, la virgulilla de la n) filtrando
-  // por rango de codigo en vez de un literal/escape unicode en el regex, que es
-  // fragil de editar a mano sin corromper el archivo.
-  const sinAcentos = Array.from((nombre || '').normalize('NFD'))
-    .filter((ch) => { const codigo = ch.codePointAt(0); return codigo < 0x0300 || codigo > 0x036f; })
-    .join('');
-  const partes = sinAcentos.toLowerCase().replace(/[^a-z\s]/g, '').trim().split(/\s+/).filter(Boolean);
+  const partes = quitarAcentos(nombre).toLowerCase().replace(/[^a-z\s]/g, '').trim().split(/\s+/).filter(Boolean);
   if (partes.length === 0) return '';
   if (partes.length === 1) return partes[0];
   return partes[0][0] + partes[partes.length - 1];

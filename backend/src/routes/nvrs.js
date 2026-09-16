@@ -4,6 +4,7 @@ const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
 const {
   obtenerInfoDispositivo, obtenerEstadoDiscos, obtenerEstadoCanales, obtenerNombresCanales, buscarGrabacionMasAntigua,
+  obtenerParametrosVideoCanal,
 } = require('../utils/isapiClient');
 const { listarCamarasArtemis } = require('../utils/artemisClient');
 
@@ -31,6 +32,15 @@ function ocultarCredenciales(row) {
 
 function seleccionarCampos(row, rol) {
   return ['admin', 'avanzado', 'sistemas_lectura'].includes(rol) ? row : ocultarCredenciales(row);
+}
+
+// GB/dia estimado a partir del bitrate maximo CONFIGURADO del stream
+// principal (ISAPI Streaming/channels) -- no es trafico medido byte a byte,
+// que el NVR no expone por API, pero es un valor real del equipo (no
+// inventado) y sirve para proyectar consumo/retencion en el Panel NVR.
+function gbDiaDesdeBitrate(bitrateMaxKbps) {
+  if (!bitrateMaxKbps) return null;
+  return (bitrateMaxKbps * 1000 / 8 * 86400) / 1e9;
 }
 
 // GET /api/nvrs
@@ -265,6 +275,15 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
       ? Math.floor((Date.now() - new Date(grabacionMasAntigua).getTime()) / 86400000)
       : null;
 
+    // Bitrate solo para canales con camara conectada -- para los vacios no
+    // hay stream que consultar y es un pedido ISAPI menos por canal.
+    let video = null;
+    if (estado?.online) {
+      try {
+        video = await obtenerParametrosVideoCanal(nvr, canal);
+      } catch { /* dato de mas, no bloquea el resto */ }
+    }
+
     const nombreCrudo = nombrePorCanal.get(canal) || null;
     canales.push({
       canal,
@@ -274,6 +293,8 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
       ip: estado?.ip ?? null,
       grabacionMasAntigua,
       diasDisponibles,
+      video,
+      gbDiaEstimado: gbDiaDesdeBitrate(video?.bitrateMaxKbps),
       error,
     });
   }
