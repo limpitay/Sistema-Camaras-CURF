@@ -71,9 +71,31 @@ async function pedidoDigest(nvr, method, path, body, { contentType } = {}) {
   if (!nvr.ip || !nvr.usuario || !nvr.contrasena) {
     throw new Error(`El NVR "${nvr.hostname}" no tiene IP/usuario/contrasena cargados`);
   }
+  // DIGEST_DEBUG traza las DOS vueltas completas (status/headers de cada
+  // una), no solo el caso "401 rechazado" -- asi sirve tambien para
+  // diagnosticar un NVR que ni siquiera llega a ofrecer el desafio (ej. un
+  // 302 antes de eso) sin tener que adivinar cual de las dos vueltas fallo.
+  const debug = process.env.DIGEST_DEBUG === 'true';
   const headersBase = body && contentType ? { 'Content-Type': contentType } : {};
 
-  const primeraRespuesta = await pedido({ hostname: nvr.ip, port: 80, path, method, headers: headersBase });
+  if (debug) console.error('[digest debug] %s -> %s %s (usuario=%s)', nvr.hostname, method, path, nvr.usuario);
+
+  let primeraRespuesta;
+  try {
+    primeraRespuesta = await pedido({ hostname: nvr.ip, port: 80, path, method, headers: headersBase });
+  } catch (err) {
+    // Error de red (timeout, conexion rechazada, etc.) -- sin esto no queda
+    // ningun rastro en el log de que el pedido ni siquiera llego a tener
+    // respuesta HTTP.
+    if (debug) console.error('[digest debug] error de red en la 1ra vuelta: %s', err.message);
+    throw err;
+  }
+  if (debug) {
+    console.error(
+      '[digest debug] 1ra respuesta: status=%s www-authenticate=%s location=%s',
+      primeraRespuesta.status, primeraRespuesta.headers['www-authenticate'] || '(ninguno)', primeraRespuesta.headers.location || '(ninguno)'
+    );
+  }
   if (primeraRespuesta.status !== 401) {
     return primeraRespuesta;
   }
@@ -86,15 +108,10 @@ async function pedidoDigest(nvr, method, path, body, { contentType } = {}) {
   const headersFinales = { ...headersBase, Authorization: authorization };
   if (body) headersFinales['Content-Length'] = Buffer.byteLength(body);
 
-  if (process.env.DIGEST_DEBUG === 'true') {
-    console.error('[digest debug] www-authenticate=%s', primeraRespuesta.headers['www-authenticate']);
-    console.error('[digest debug] authorization enviado=%s', authorization);
-  }
+  if (debug) console.error('[digest debug] authorization enviado=%s', authorization);
 
   const segunda = await pedido({ hostname: nvr.ip, port: 80, path, method, headers: headersFinales }, body);
-  if (process.env.DIGEST_DEBUG === 'true' && segunda.status === 401) {
-    console.error('[digest debug] rechazado de nuevo, www-authenticate=%s', segunda.headers['www-authenticate']);
-  }
+  if (debug) console.error('[digest debug] 2da respuesta: status=%s www-authenticate=%s', segunda.status, segunda.headers['www-authenticate'] || '(ninguno)');
   return segunda;
 }
 
