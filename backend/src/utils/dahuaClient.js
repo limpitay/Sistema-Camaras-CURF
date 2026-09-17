@@ -22,7 +22,8 @@ async function dahuaCgi(nvr, endpoint, params) {
     throw new Error(`Usuario/contrasena rechazados por el NVR "${nvr.hostname}"`);
   }
   if (respuesta.status < 200 || respuesta.status >= 300) {
-    throw new Error(`El NVR "${nvr.hostname}" respondio HTTP ${respuesta.status}`);
+    const location = respuesta.headers.location ? ` (Location: ${respuesta.headers.location})` : '';
+    throw new Error(`El NVR "${nvr.hostname}" respondio HTTP ${respuesta.status}${location}`);
   }
   return respuesta.body;
 }

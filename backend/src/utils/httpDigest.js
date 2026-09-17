@@ -22,17 +22,19 @@ function parsearDesafioDigest(header) {
   return params;
 }
 
-function construirAuthorization({ usuario, contrasena, method, uri, desafio }) {
+function construirAuthorization({ usuario, contrasena, method, uri, body, desafio }) {
   const ha1 = md5(`${usuario}:${desafio.realm}:${contrasena}`);
-  const ha2 = md5(`${method}:${uri}`);
   // El desafio puede ofrecer varios qop juntos (ej. qop="auth,auth-int") --
   // hay que elegir UNO solo para el header de respuesta (RFC 2617), no
-  // mandar la lista cruda. Se prefiere "auth" (no necesita hash del body).
-  // Sin esto, un NVR que ofrece mas de un qop rechaza la respuesta con 401
-  // aunque el usuario/contrasena sean correctos -- Python's requests hace
-  // exactamente esta misma eleccion.
+  // mandar la lista cruda. Se prefiere "auth" (no necesita hash del body),
+  // pero si el NVR solo ofrece "auth-int" hay que respetarlo -- HA2 se
+  // calcula distinto en ese caso (incluye el hash del body, ver abajo).
+  // Sin nada de esto, un NVR que ofrece mas de un qop, o solo auth-int,
+  // rechaza la respuesta con 401 aunque el usuario/contrasena sean
+  // correctos -- Python's requests hace la misma eleccion de qop.
   const opciones = desafio.qop ? desafio.qop.split(',').map((s) => s.trim()) : [];
   const qop = opciones.includes('auth') ? 'auth' : (opciones[0] || null);
+  const ha2 = qop === 'auth-int' ? md5(`${method}:${uri}:${md5(body || '')}`) : md5(`${method}:${uri}`);
   let response;
   let extra = '';
   if (qop) {
@@ -80,7 +82,7 @@ async function pedidoDigest(nvr, method, path, body, { contentType } = {}) {
   if (!desafio) {
     throw new Error(`El NVR "${nvr.hostname}" devolvio 401 sin desafio Digest valido`);
   }
-  const authorization = construirAuthorization({ usuario: nvr.usuario, contrasena: nvr.contrasena, method, uri: path, desafio });
+  const authorization = construirAuthorization({ usuario: nvr.usuario, contrasena: nvr.contrasena, method, uri: path, body, desafio });
   const headersFinales = { ...headersBase, Authorization: authorization };
   if (body) headersFinales['Content-Length'] = Buffer.byteLength(body);
 
