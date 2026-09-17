@@ -240,6 +240,80 @@ function CalculadoraRetencion({ nvrs, detallePorNvr }) {
   );
 }
 
+// Barra horizontal simple (magnitud, un solo color) -- comparar un valor
+// entre entidades no necesita paleta categorica, la identidad ya la da la
+// etiqueta de cada fila, no el color.
+function BarraComparativa({ filas, valorKey, unidad, decimales = 0 }) {
+  const max = Math.max(1, ...filas.map((f) => f[valorKey] || 0));
+  return (
+    <div className="d-flex flex-column gap-2">
+      {filas.map((f) => (
+        <div key={f.hostname} className="d-flex align-items-center gap-2">
+          <div className="small text-body-secondary text-truncate" style={{ width: 90, flexShrink: 0 }}>{f.hostname}</div>
+          <div className="flex-grow-1 bg-body-tertiary rounded" style={{ height: 18 }}>
+            <div className="bg-primary rounded h-100" style={{ width: `${Math.max(2, ((f[valorKey] || 0) / max) * 100)}%` }} />
+          </div>
+          <div className="small font-monospace text-end" style={{ width: 84, flexShrink: 0 }}>
+            {num(f[valorKey], decimales)} {unidad}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Comparativa entre NVR (no evolucion en el tiempo -- no hay historial
+// guardado todavia, son los valores del ultimo "Actualizar" de cada uno).
+function SeccionMetricas({ nvrs, detallePorNvr }) {
+  const filas = useMemo(() => nvrs
+    .map((nvr) => {
+      const detalle = detallePorNvr[nvr.id];
+      if (!detalle?.estado || !detalle?.canales) return null;
+      const st = calcularStorage(detalle.estado);
+      if (!st) return null;
+      const usados = detalle.canales.filter((c) => c.online).length;
+      const gbDiaProm = promedioGbDia(detalle.canales);
+      return {
+        hostname: nvr.hostname,
+        ocupadoGb: st.usadoGb,
+        consumoDiaGb: gbDiaProm != null ? gbDiaProm * usados : 0,
+      };
+    })
+    .filter(Boolean), [nvrs, detallePorNvr]);
+
+  return (
+    <section className="mb-4">
+      <h2 className="h5 fw-bold mb-1">Metricas</h2>
+      <p className="text-body-secondary small mb-3">
+        Comparativa entre NVR con los valores del ultimo "Actualizar" de cada uno -- todavia no se guarda un
+        historial dia a dia, asi que esto no es una evolucion en el tiempo.
+      </p>
+      {filas.length === 0 ? (
+        <div className="text-body-secondary small">Actualiza al menos un NVR (arriba, en Grabaciones) para ver metricas.</div>
+      ) : (
+        <div className="row g-3">
+          <div className="col-12 col-lg-6">
+            <div className="card shadow-sm h-100">
+              <div className="card-body">
+                <div className="fw-semibold small mb-3">Espacio ocupado por NVR (GB)</div>
+                <BarraComparativa filas={filas} valorKey="ocupadoGb" unidad="GB" />
+              </div>
+            </div>
+          </div>
+          <div className="col-12 col-lg-6">
+            <div className="card shadow-sm h-100">
+              <div className="card-body">
+                <div className="fw-semibold small mb-3">Consumo diario estimado por NVR (GB/d)</div>
+                <BarraComparativa filas={filas} valorKey="consumoDiaGb" unidad="GB/d" decimales={1} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function Nvr() {
   const { user } = useAuth();
   const [nvrs, setNvrs] = useState([]);
@@ -489,9 +563,12 @@ export default function Nvr() {
         />
       </div>
 
-      <div className="row g-3 mb-4">
-        {nvrsConApi.length === 0 && <div className="col-12 text-body-secondary">Sin NVR con API disponible en Recursos.</div>}
-        {nvrsConApi.map((nvr) => {
+      <section className="mb-4">
+        <h2 className="h5 fw-bold mb-1">Grabaciones</h2>
+        <p className="text-body-secondary small mb-3">Detalle en vivo por NVR: almacenamiento, canales y la tabla de grabacion de cada canal.</p>
+        <div className="row g-3">
+          {nvrsConApi.length === 0 && <div className="col-12 text-body-secondary">Sin NVR con API disponible en Recursos.</div>}
+          {nvrsConApi.map((nvr) => {
           const detalle = detallePorNvr[nvr.id];
           const abierta = !!abiertas[nvr.id];
           const usadosEnVivo = detalle?.canales ? detalle.canales.filter((c) => c.online).length : null;
@@ -645,7 +722,10 @@ export default function Nvr() {
             </div>
           );
         })}
-      </div>
+        </div>
+      </section>
+
+      <SeccionMetricas nvrs={nvrsConApi} detallePorNvr={detallePorNvr} />
 
       <CalculadoraRetencion nvrs={nvrsConApi} detallePorNvr={detallePorNvr} />
     </Layout>
