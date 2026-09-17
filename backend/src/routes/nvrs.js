@@ -4,7 +4,7 @@ const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
 const {
   obtenerInfoDispositivo, obtenerEstadoDiscos, obtenerEstadoCanales, obtenerNombresCanales, buscarGrabacionMasAntigua,
-  obtenerParametrosVideoCanal,
+  buscarGrabacionMasReciente, obtenerParametrosVideoCanal,
 } = require('../utils/isapiClient');
 const { listarCamarasArtemis } = require('../utils/artemisClient');
 
@@ -309,14 +309,27 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
     const estado = estadoPorCanal.get(canal) || null;
 
     let grabacionMasAntigua = null;
+    let grabacionMasReciente = null;
     let error = null;
     try {
-      grabacionMasAntigua = await buscarGrabacionMasAntigua(nvr, canal);
+      const busqueda = await buscarGrabacionMasAntigua(nvr, canal);
+      grabacionMasAntigua = busqueda?.inicio || null;
+      // Canal sin camara asignada: lo que haya grabado quedo fijo en el
+      // tiempo (ver buscarGrabacionMasReciente) -- ahi interesa hasta cuando
+      // llego esa grabacion vieja, no "hoy - mas antigua" (eso crece solo).
+      if (busqueda && estado?.online == null) {
+        grabacionMasReciente = busqueda.numOfMatches > 1
+          ? await buscarGrabacionMasReciente(nvr, canal, busqueda.numOfMatches)
+          : grabacionMasAntigua;
+      }
     } catch (err) {
       error = err.message;
     }
     const diasDisponibles = grabacionMasAntigua
       ? Math.floor((Date.now() - new Date(grabacionMasAntigua).getTime()) / 86400000)
+      : null;
+    const diasGrabados = (grabacionMasAntigua && grabacionMasReciente)
+      ? Math.max(0, Math.round((new Date(grabacionMasReciente).getTime() - new Date(grabacionMasAntigua).getTime()) / 86400000))
       : null;
 
     // Bitrate solo para canales con camara conectada -- para los vacios no
@@ -337,6 +350,7 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
       ip: estado?.ip ?? null,
       grabacionMasAntigua,
       diasDisponibles,
+      diasGrabados,
       video,
       gbDiaEstimado: gbDiaDesdeBitrate(video?.bitrateMaxKbps),
       error,

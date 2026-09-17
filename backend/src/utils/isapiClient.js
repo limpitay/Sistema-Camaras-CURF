@@ -166,9 +166,10 @@ async function obtenerParametrosVideoCanal(nvr, canal) {
   };
 }
 
-// POST /ISAPI/ContentMgmt/search — busca la grabacion mas antigua de un
-// canal (trackID = canal*100+1, stream principal) para estimar la
-// retencion real de grabacion disponible en ese canal.
+// POST /ISAPI/ContentMgmt/search — un segmento de grabacion de un canal
+// (trackID = canal*100+1, stream principal) en la posicion pedida dentro del
+// rango completo (2000-01-01 a hoy). Se usa con posicion 0 para el mas
+// antiguo, y con el ultimo indice (numOfMatches - 1) para el mas reciente.
 //
 // Dos detalles no documentados que hacen falta para que este NVR (firmware
 // V4.84.100) acepte el body -- sin ellos tira "badXmlContent" pase lo que
@@ -176,7 +177,7 @@ async function obtenerParametrosVideoCanal(nvr, canal) {
 // problema del cliente): searchID tiene que ser un UUID valido (no un string
 // cualquiera), y metadataDescriptor tiene que ser exactamente
 // "//metadata.psia.org/VideoMotion".
-async function buscarGrabacionMasAntigua(nvr, canal) {
+async function buscarSegmentoGrabacion(nvr, canal, posicion) {
   const trackId = canal * 100 + 1;
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <CMSearchDescription>
@@ -194,7 +195,7 @@ async function buscarGrabacionMasAntigua(nvr, canal) {
     <contentType>video</contentType>
   </contentTypeList>
   <maxResults>1</maxResults>
-  <searchResultPostion>0</searchResultPostion>
+  <searchResultPostion>${posicion}</searchResultPostion>
   <metadataList>
     <metadataDescriptor>//metadata.psia.org/VideoMotion</metadataDescriptor>
   </metadataList>
@@ -208,7 +209,29 @@ async function buscarGrabacionMasAntigua(nvr, canal) {
   const item = Array.isArray(resultado.matchList?.searchMatchItem)
     ? resultado.matchList.searchMatchItem[0]
     : resultado.matchList?.searchMatchItem;
-  return item?.timeSpan?.startTime || null;
+  return { item, numOfMatches: Number(resultado.numOfMatches) };
+}
+
+// Grabacion mas antigua de un canal, para estimar la retencion real
+// disponible. Devuelve tambien numOfMatches (total de segmentos en el rango)
+// para poder despues pedir el ultimo sin recorrer todo (ver
+// buscarGrabacionMasReciente, canales sin camara asignada).
+async function buscarGrabacionMasAntigua(nvr, canal) {
+  const resultado = await buscarSegmentoGrabacion(nvr, canal, 0);
+  if (!resultado) return null;
+  return { inicio: resultado.item?.timeSpan?.startTime || null, numOfMatches: resultado.numOfMatches };
+}
+
+// Solo para canales sin camara asignada (ISAPI no los lista en
+// InputProxy/channels/status): ahi no hay nada nuevo grabandose que pise lo
+// viejo, asi que "dias disponibles" (hoy - mas antigua) crece un dia por dia
+// para siempre sin decir nada util. Este busca el ULTIMO segmento para saber
+// hasta cuando llego esa grabacion vieja, y con eso el backend puede calcular
+// cuanto duro realmente (ver diasGrabados en nvrs.js). Un pedido ISAPI mas,
+// pero solo en canales vacios.
+async function buscarGrabacionMasReciente(nvr, canal, numOfMatches) {
+  const resultado = await buscarSegmentoGrabacion(nvr, canal, numOfMatches - 1);
+  return resultado?.item?.timeSpan?.endTime || resultado?.item?.timeSpan?.startTime || null;
 }
 
 module.exports = {
@@ -218,6 +241,7 @@ module.exports = {
   obtenerNombresCanales,
   obtenerParametrosVideoCanal,
   buscarGrabacionMasAntigua,
+  buscarGrabacionMasReciente,
   // Solo para el script de prueba (_test_isapi.js) mientras se ajustan
   // nombres de campo reales contra el equipo -- no lo usan las rutas.
   isapiXml,

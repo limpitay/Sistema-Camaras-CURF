@@ -20,14 +20,23 @@ function num(n, decimales = 0) {
 
 // dd-mm-aaaa hh:mm:ss en hora Argentina (UTC-3 fijo, sin horario de
 // verano) -- mismo formato que el script de referencia por fuera de la app.
-function formatearFecha(iso) {
-  if (!iso) return '—';
+function aArgentina(iso) {
+  if (!iso) return null;
   const argentina = new Date(new Date(iso).getTime() - 3 * 60 * 60 * 1000);
   const pad = (n) => String(n).padStart(2, '0');
-  const fecha = `${pad(argentina.getUTCDate())}-${pad(argentina.getUTCMonth() + 1)}-${argentina.getUTCFullYear()}`;
-  const hora = `${pad(argentina.getUTCHours())}:${pad(argentina.getUTCMinutes())}:${pad(argentina.getUTCSeconds())}`;
-  return `${fecha} ${hora} (ARG)`;
+  return {
+    fecha: `${pad(argentina.getUTCDate())}-${pad(argentina.getUTCMonth() + 1)}-${argentina.getUTCFullYear()}`,
+    hora: `${pad(argentina.getUTCHours())}:${pad(argentina.getUTCMinutes())}:${pad(argentina.getUTCSeconds())}`,
+  };
 }
+
+function formatearFecha(iso) {
+  const partes = aArgentina(iso);
+  return partes ? `${partes.fecha} ${partes.hora} (ARG)` : '—';
+}
+
+function formatearSoloFecha(iso) { return aArgentina(iso)?.fecha ?? '—'; }
+function formatearSoloHora(iso) { return aArgentina(iso)?.hora ?? '—'; }
 
 // Nombres/descripciones de camara vienen del propio NVR o de HikCentral (los
 // carga el instalador o se ven en su pantalla) -- pueden traer tildes/n, que
@@ -261,6 +270,12 @@ export default function Nvr() {
     return () => document.removeEventListener('click', alClickear);
   }, []);
 
+  // ISAPI (lo que usa este panel para consultar en vivo) es protocolo
+  // Hikvision -- los NVR Dahua del inventario no responden a esto, asi que
+  // por ahora se listan aparte y no entran a este dashboard.
+  const nvrsConApi = useMemo(() => nvrs.filter((n) => /hikvision/i.test(n.marca || '')), [nvrs]);
+  const nvrsSinApi = nvrs.length - nvrsConApi.length;
+
   // En exito devuelve el snapshot nuevo completo; en error devuelve solo el
   // error, sin tocar estado/canales -- asi una consulta fallida no borra el
   // ultimo dato bueno que ya estaba en pantalla (compartido con el resto de
@@ -295,9 +310,9 @@ export default function Nvr() {
     setCargandoTodo(true);
     setErroresActualizacion([]);
     const errores = [];
-    for (let i = 0; i < nvrs.length; i += 1) {
-      const nvr = nvrs[i];
-      setProgreso({ actual: i + 1, total: nvrs.length, hostname: nvr.hostname });
+    for (let i = 0; i < nvrsConApi.length; i += 1) {
+      const nvr = nvrsConApi[i];
+      setProgreso({ actual: i + 1, total: nvrsConApi.length, hostname: nvr.hostname });
       const resultado = await consultarUno(nvr);
       if (resultado.error) errores.push(`${nvr.hostname}: ${resultado.error}`);
       setDetallePorNvr((prev) => ({ ...prev, [nvr.id]: { ...prev[nvr.id], ...resultado } }));
@@ -324,7 +339,7 @@ export default function Nvr() {
     let consumoTotalGbDia = 0;
     let nvrConDatos = 0;
     const retenciones = [];
-    for (const nvr of nvrs) {
+    for (const nvr of nvrsConApi) {
       canalesInstalados += nvr.canales_totales || 0;
       const detalle = detallePorNvr[nvr.id];
       if (!detalle?.estado || !detalle?.canales) continue;
@@ -340,11 +355,11 @@ export default function Nvr() {
     }
     const minRet = retenciones.length ? retenciones.reduce((a, b) => (a.dias < b.dias ? a : b)) : null;
     return { canalesInstalados, canalesUsados, storageTotalGb, consumoTotalGbDia, nvrConDatos, minRet };
-  }, [nvrs, detallePorNvr]);
+  }, [nvrsConApi, detallePorNvr]);
 
   const camarasIndex = useMemo(() => {
     const lista = [];
-    for (const nvr of nvrs) {
+    for (const nvr of nvrsConApi) {
       const canales = detallePorNvr[nvr.id]?.canales;
       if (!canales) continue;
       for (const c of canales) {
@@ -359,7 +374,7 @@ export default function Nvr() {
       }
     }
     return lista;
-  }, [nvrs, detallePorNvr]);
+  }, [nvrsConApi, detallePorNvr]);
 
   const resultadosBusqueda = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -420,7 +435,7 @@ export default function Nvr() {
                 </div>
               )}
             </div>
-            <button type="button" className="btn btn-sm btn-primary text-nowrap" disabled={cargandoTodo || nvrs.length === 0} onClick={actualizarTodo}>
+            <button type="button" className="btn btn-sm btn-primary text-nowrap" disabled={cargandoTodo || nvrsConApi.length === 0} onClick={actualizarTodo}>
               {cargandoTodo ? `Actualizando ${progreso ? `${progreso.actual}/${progreso.total}` : '...'}` : 'Actualizar todo'}
             </button>
           </div>
@@ -442,12 +457,19 @@ export default function Nvr() {
         </div>
       )}
 
+      {nvrsSinApi > 0 && (
+        <div className="small text-body-secondary mt-2">
+          {nvrsSinApi} NVR Dahua no se listan aca -- ISAPI es protocolo Hikvision, todavia no hay forma de consultarlos
+          en vivo. Siguen enteros en Recursos &gt; NVR.
+        </div>
+      )}
+
       <div className="row row-cols-2 row-cols-md-5 g-3 mt-1 mb-4">
-        <KpiTile label="NVR" value={nvrs.length} sub={`${resumen.canalesInstalados} canales instalados`} />
+        <KpiTile label="NVR" value={nvrsConApi.length} sub={`${resumen.canalesInstalados} canales instalados`} />
         <KpiTile
           label="Camaras en uso"
           value={resumen.nvrConDatos ? resumen.canalesUsados : '—'}
-          sub={resumen.nvrConDatos === 0 ? 'Actualiza para ver' : `${resumen.nvrConDatos}/${nvrs.length} NVR actualizados`}
+          sub={resumen.nvrConDatos === 0 ? 'Actualiza para ver' : `${resumen.nvrConDatos}/${nvrsConApi.length} NVR actualizados`}
         />
         <KpiTile
           label="Almacenamiento total"
@@ -468,8 +490,8 @@ export default function Nvr() {
       </div>
 
       <div className="row g-3 mb-4">
-        {nvrs.length === 0 && <div className="col-12 text-body-secondary">Sin NVR cargados en Recursos.</div>}
-        {nvrs.map((nvr) => {
+        {nvrsConApi.length === 0 && <div className="col-12 text-body-secondary">Sin NVR con API disponible en Recursos.</div>}
+        {nvrsConApi.map((nvr) => {
           const detalle = detallePorNvr[nvr.id];
           const abierta = !!abiertas[nvr.id];
           const usadosEnVivo = detalle?.canales ? detalle.canales.filter((c) => c.online).length : null;
@@ -555,7 +577,7 @@ export default function Nvr() {
                         <div className="row row-cols-2 row-cols-md-4 g-2 mb-3">
                           <Metric label="Consumo diario estimado" value={consumoNvr != null ? `${num(consumoNvr, 1)} GB/d` : '—'} />
                           <Metric label="Promedio por canal" value={gbDiaProm != null ? `${num(gbDiaProm, 1)} GB/d` : '—'} />
-                          <Metric label={`Retencion actual (${usados} can.)`} value={retActual != null ? `${num(retActual)} dias` : '—'} className={claseRetencion(retActual)} />
+                          <Metric label={`Retencion minima (${usados} can.)`} value={retActual != null ? `${num(retActual)} dias` : '—'} className={claseRetencion(retActual)} />
                           <Metric
                             label={`Retencion con ${nvr.canales_totales ?? '?'} can. llenos`}
                             value={retFull != null ? `${num(retFull)} dias` : '—'}
@@ -567,15 +589,17 @@ export default function Nvr() {
 
                     {detalle?.canales && (
                       <>
-                        <div className="table-responsive" style={{ maxHeight: 280, overflowY: 'auto' }}>
+                        <div className="table-responsive">
                           <table className="table table-sm align-middle mb-0">
-                            <thead className="table-light sticky-top">
+                            <thead className="table-light">
                               <tr>
                                 <th>Canal</th>
-                                <th>Camara</th>
+                                <th>Hostname</th>
                                 <th>IP</th>
                                 <th>Estado</th>
                                 <th>GB/dia</th>
+                                <th>Fecha inicio grab.</th>
+                                <th>Hora inicio grab.</th>
                                 <th>Dias disp.</th>
                               </tr>
                             </thead>
@@ -594,8 +618,13 @@ export default function Nvr() {
                                     )}
                                   </td>
                                   <td className="font-monospace small">{c.gbDiaEstimado != null ? num(c.gbDiaEstimado, 1) : '—'}</td>
-                                  <td title={c.grabacionMasAntigua ? `Grabacion mas antigua: ${formatearFecha(c.grabacionMasAntigua)}` : (c.error || '')}>
-                                    {c.error ? <span className="text-danger small">error</span> : (c.diasDisponibles ?? '—')}
+                                  <td className="font-monospace small text-body-secondary">{formatearSoloFecha(c.grabacionMasAntigua)}</td>
+                                  <td className="font-monospace small text-body-secondary">{formatearSoloHora(c.grabacionMasAntigua)}</td>
+                                  <td>
+                                    {c.error ? <span className="text-danger small" title={c.error}>error</span>
+                                      : c.online == null && c.diasGrabados != null
+                                        ? <span className="text-body-secondary">({num(c.diasGrabados)} dias de grabacion)</span>
+                                        : (c.diasDisponibles ?? '—')}
                                   </td>
                                 </tr>
                               ))}
@@ -604,7 +633,9 @@ export default function Nvr() {
                         </div>
                         <div className="small text-body-secondary mt-2">
                           GB/dia estimado a partir del bitrate maximo configurado de cada canal (ISAPI) -- no es trafico medido byte a byte.
-                          Dias disponibles = grabacion mas antigua encontrada en el canal vs. hoy.
+                          Fecha/hora inicio grab. = grabacion mas antigua encontrada en el canal (hora ARG). Dias disponibles = esa fecha vs. hoy
+                          -- en canales sin camara asignada eso solo crece (nada nuevo pisa lo viejo), asi que ahi se muestra cuanto duro esa
+                          grabacion (mas antigua hasta la mas reciente encontrada).
                         </div>
                       </>
                     )}
@@ -616,7 +647,7 @@ export default function Nvr() {
         })}
       </div>
 
-      <CalculadoraRetencion nvrs={nvrs} detallePorNvr={detallePorNvr} />
+      <CalculadoraRetencion nvrs={nvrsConApi} detallePorNvr={detallePorNvr} />
     </Layout>
   );
 }
