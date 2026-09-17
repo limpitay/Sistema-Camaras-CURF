@@ -1,4 +1,5 @@
 const http = require('http');
+const https = require('https');
 const crypto = require('crypto');
 
 function md5(texto) {
@@ -49,9 +50,15 @@ function construirAuthorization({ usuario, contrasena, method, uri, body, desafi
   return `Digest username="${usuario}", realm="${desafio.realm}", nonce="${desafio.nonce}", uri="${uri}", response="${response}"${extra}${opaque}`;
 }
 
-function pedido(opciones, body) {
+// Algunos NVR (ej. un DHI-NVR1108HS-S3/H) tienen el puerto 80 apagado del
+// todo y redirigen (301/302) directo a HTTPS -- certificado autofirmado del
+// propio equipo, por eso rejectUnauthorized:false (mismo criterio que un
+// curl -k contra un dispositivo de LAN interna, no un sitio publico).
+function pedido({ protocolo = 'http', ...opciones }, body) {
+  const transporte = protocolo === 'https' ? https : http;
+  const opcionesFinales = protocolo === 'https' ? { ...opciones, rejectUnauthorized: false } : opciones;
   return new Promise((resolve, reject) => {
-    const req = http.request(opciones, (res) => {
+    const req = transporte.request(opcionesFinales, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString('utf8') }));
@@ -62,12 +69,19 @@ function pedido(opciones, body) {
   });
 }
 
+const CODIGOS_REDIRECT = [301, 302, 303, 307, 308];
+
 // GET o POST a un path cualquiera de un NVR con Digest Auth. `nvr` necesita
 // `ip`, `usuario`, `contrasena` (migracion 028). El primer pedido (el que va
 // a rebotar con 401 para conseguir el desafio) se manda SIN el body:
 // mandarlo en las dos vueltas confunde el parser de algunos NVR, que llegan
 // a leer los dos bodies pegados — mismo criterio que usa curl --digest -d.
-async function pedidoDigest(nvr, method, path, body, { contentType } = {}) {
+//
+// `destino` es el protocolo/host/puerto donde efectivamente se manda el
+// pedido -- arranca en http/80 (nvr.ip), pero si ese puerto redirige a
+// HTTPS (ver CODIGOS_REDIRECT) se sigue una sola vez contra el destino real,
+// sin reiniciar el ida-y-vuelta del Digest desde cero mas de una vez.
+async function pedidoDigest(nvr, method, path, body, { contentType } = {}, destino = { protocolo: 'http', host: nvr.ip, port: 80 }, siguioRedirect = false) {
   if (!nvr.ip || !nvr.usuario || !nvr.contrasena) {
     throw new Error(`El NVR "${nvr.hostname}" no tiene IP/usuario/contrasena cargados`);
   }
@@ -77,12 +91,13 @@ async function pedidoDigest(nvr, method, path, body, { contentType } = {}) {
   // 302 antes de eso) sin tener que adivinar cual de las dos vueltas fallo.
   const debug = process.env.DIGEST_DEBUG === 'true';
   const headersBase = body && contentType ? { 'Content-Type': contentType } : {};
+  const opcionesBase = { protocolo: destino.protocolo, hostname: destino.host, port: destino.port, path, method };
 
-  if (debug) console.error('[digest debug] %s -> %s %s (usuario=%s)', nvr.hostname, method, path, nvr.usuario);
+  if (debug) console.error('[digest debug] %s -> %s://%s:%s%s (usuario=%s)', nvr.hostname, destino.protocolo, destino.host, destino.port, path, nvr.usuario);
 
   let primeraRespuesta;
   try {
-    primeraRespuesta = await pedido({ hostname: nvr.ip, port: 80, path, method, headers: headersBase });
+    primeraRespuesta = await pedido({ ...opcionesBase, headers: headersBase });
   } catch (err) {
     // Error de red (timeout, conexion rechazada, etc.) -- sin esto no queda
     // ningun rastro en el log de que el pedido ni siquiera llego a tener
@@ -96,6 +111,18 @@ async function pedidoDigest(nvr, method, path, body, { contentType } = {}) {
       primeraRespuesta.status, primeraRespuesta.headers['www-authenticate'] || '(ninguno)', primeraRespuesta.headers.location || '(ninguno)'
     );
   }
+
+  if (CODIGOS_REDIRECT.includes(primeraRespuesta.status) && primeraRespuesta.headers.location && !siguioRedirect) {
+    const destinoUrl = new URL(primeraRespuesta.headers.location);
+    const nuevoDestino = {
+      protocolo: destinoUrl.protocol.replace(':', ''),
+      host: destinoUrl.hostname,
+      port: destinoUrl.port || (destinoUrl.protocol === 'https:' ? 443 : 80),
+    };
+    if (debug) console.error('[digest debug] siguiendo redirect a %s', primeraRespuesta.headers.location);
+    return pedidoDigest(nvr, method, destinoUrl.pathname + destinoUrl.search, body, { contentType }, nuevoDestino, true);
+  }
+
   if (primeraRespuesta.status !== 401) {
     return primeraRespuesta;
   }
@@ -110,7 +137,7 @@ async function pedidoDigest(nvr, method, path, body, { contentType } = {}) {
 
   if (debug) console.error('[digest debug] authorization enviado=%s', authorization);
 
-  const segunda = await pedido({ hostname: nvr.ip, port: 80, path, method, headers: headersFinales }, body);
+  const segunda = await pedido({ ...opcionesBase, headers: headersFinales }, body);
   if (debug) console.error('[digest debug] 2da respuesta: status=%s www-authenticate=%s', segunda.status, segunda.headers['www-authenticate'] || '(ninguno)');
   return segunda;
 }
