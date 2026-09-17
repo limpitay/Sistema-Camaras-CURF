@@ -18,6 +18,12 @@ const CRUD_SUBITEMS = [
   { to: '/crud', tab: 'areas', label: 'Areas', panel: 'recursos-areas' },
 ];
 
+// Mismo patron que CRUD_SUBITEMS: Nvr.jsx lee/escribe el tab activo en ?tab=.
+const NVR_PANEL_SUBITEMS = [
+  { to: '/nvr', tab: 'grabaciones', label: 'Grabaciones', panel: 'nvr-panel-grabaciones' },
+  { to: '/nvr', tab: 'metricas', label: 'Metricas', panel: 'nvr-panel-metricas' },
+];
+
 // "Configuracion" vive dentro del perfil (el bloque de usuario al pie del
 // sidebar), no como otra entrada mas del menu — clic ahi despliega esto,
 // mismo patron que un grupo (Recursos) pero disparado desde el perfil. Los
@@ -54,7 +60,7 @@ const LINKS_POR_ROL = {
     { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', panel: 'dashboard' },
     { label: 'Recursos', icon: 'crud', children: CRUD_SUBITEMS, panel: 'recursos' },
     { to: '/accesos-nvr', label: 'Accesos NVR', icon: 'video', panel: 'accesos-nvr' },
-    { to: '/nvr', label: 'Panel NVR', icon: 'video', panel: 'nvr-panel' },
+    { label: 'Panel NVR', icon: 'video', children: NVR_PANEL_SUBITEMS, panel: 'nvr-panel' },
     // { to: '/solicitudes', label: 'Solicitudes', icon: 'solicitud' },
     // { to: '/pendientes-hikcentral', label: 'Pendientes HikCentral', icon: 'pendiente' },
     // { to: '/historial', label: 'Historial de accesos', icon: 'historial' },
@@ -63,7 +69,7 @@ const LINKS_POR_ROL = {
     { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', panel: 'dashboard' },
     { label: 'Recursos', icon: 'crud', children: CRUD_SUBITEMS, panel: 'recursos' },
     { to: '/accesos-nvr', label: 'Accesos NVR', icon: 'video', panel: 'accesos-nvr' },
-    { to: '/nvr', label: 'Panel NVR', icon: 'video', panel: 'nvr-panel' },
+    { label: 'Panel NVR', icon: 'video', children: NVR_PANEL_SUBITEMS, panel: 'nvr-panel' },
     // { to: '/solicitudes', label: 'Solicitudes', icon: 'solicitud' },
     // { to: '/pendientes-hikcentral', label: 'Pendientes HikCentral', icon: 'pendiente' },
     // { to: '/historial', label: 'Historial de accesos', icon: 'historial' },
@@ -72,7 +78,7 @@ const LINKS_POR_ROL = {
     { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', panel: 'dashboard' },
     { label: 'Recursos', icon: 'crud', children: CRUD_SUBITEMS, panel: 'recursos' },
     { to: '/accesos-nvr', label: 'Accesos NVR', icon: 'video', panel: 'accesos-nvr' },
-    { to: '/nvr', label: 'Panel NVR', icon: 'video', panel: 'nvr-panel' },
+    { label: 'Panel NVR', icon: 'video', children: NVR_PANEL_SUBITEMS, panel: 'nvr-panel' },
     // { to: '/solicitudes', label: 'Solicitudes', icon: 'solicitud' },
     // { to: '/pendientes-hikcentral', label: 'Pendientes HikCentral', icon: 'pendiente' },
     // { to: '/historial', label: 'Historial de accesos', icon: 'historial' },

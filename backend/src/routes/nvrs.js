@@ -67,6 +67,27 @@ function guardarCanalesSnapshot(nvrId, canales, actualizadoPor) {
   `).run(nvrId, JSON.stringify(canales), new Date().toISOString(), actualizadoPor || null);
 }
 
+// Panel NVR > Metricas (migracion 030): un punto por NVR por dia (hora
+// Argentina, fija en UTC-3 como el resto del panel) con el espacio ocupado,
+// para poder graficar la evolucion en el tiempo. Se pisa si ya habia un punto
+// hoy (varios "Actualizar" el mismo dia no duplican, solo refrescan el valor).
+function fechaArgentinaHoy() {
+  return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function guardarHistorialDiario(nvrId, estado) {
+  const discos = estado?.discos || [];
+  if (!discos.length) return;
+  const capacidadMb = discos.reduce((a, d) => a + (d.capacidadMb || 0), 0);
+  const libreMb = discos.reduce((a, d) => a + (d.libreMb || 0), 0);
+  if (!capacidadMb) return;
+  db.prepare(`
+    INSERT INTO nvr_historial_diario (nvr_id, fecha, ocupado_gb, capacidad_gb)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT (nvr_id, fecha) DO UPDATE SET ocupado_gb = excluded.ocupado_gb, capacidad_gb = excluded.capacidad_gb
+  `).run(nvrId, fechaArgentinaHoy(), (capacidadMb - libreMb) / 1024, capacidadMb / 1024);
+}
+
 // GET /api/nvrs
 router.get('/', auth, (req, res) => {
   const filas = db.prepare(`${SELECT_BASE} ORDER BY n.hostname`).all();
@@ -154,6 +175,25 @@ router.get('/snapshots', auth, requireRole('admin', 'avanzado', 'sistemas_lectur
       actualizadoEn: fila.actualizado_en,
       actualizadoPor: fila.actualizado_por,
     };
+  }
+  res.json(porNvr);
+});
+
+// GET /api/nvrs/historial?dias=60 — Panel NVR > Metricas: la evolucion diaria
+// de espacio ocupado de cada NVR (ver nvr_historial_diario), para el grafico
+// de linea de tiempo. Tope de 60 dias (2 meses) para no dejar pedir todo el
+// historico de una.
+router.get('/historial', auth, requireRole('admin', 'avanzado', 'sistemas_lectura'), (req, res) => {
+  const dias = Math.min(60, Math.max(1, parseInt(req.query.dias, 10) || 60));
+  const filas = db.prepare(`
+    SELECT nvr_id, fecha, ocupado_gb, capacidad_gb FROM nvr_historial_diario
+    WHERE fecha >= date('now', ?)
+    ORDER BY fecha ASC
+  `).all(`-${dias} days`);
+
+  const porNvr = {};
+  for (const fila of filas) {
+    (porNvr[fila.nvr_id] ||= []).push({ fecha: fila.fecha, ocupadoGb: fila.ocupado_gb, capacidadGb: fila.capacidad_gb });
   }
   res.json(porNvr);
 });
@@ -259,6 +299,7 @@ router.get('/:id/estado', auth, requireRole('admin', 'avanzado', 'sistemas_lectu
     const [dispositivo, discos] = await Promise.all([obtenerInfoDispositivo(nvr), obtenerEstadoDiscos(nvr)]);
     const estado = { dispositivo, discos };
     guardarEstadoSnapshot(nvr.id, estado, req.user.nombre);
+    guardarHistorialDiario(nvr.id, estado);
     res.json(estado);
   } catch (err) {
     res.status(502).json({ error: `No se pudo consultar el NVR: ${err.message}` });

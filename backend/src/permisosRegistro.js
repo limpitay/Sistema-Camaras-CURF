@@ -13,17 +13,23 @@ const ROLES_CONFIGURABLES = ['avanzado', 'sistemas_lectura', 'direccion', 'mando
 // "recursos" esta oculto, sus hijos no importan (el grupo entero desaparece
 // del sidebar, ver Layout.jsx), pero quedan igual como overrides propios
 // para no perder la seleccion si mas adelante se vuelve a mostrar el grupo.
+// Mismo criterio para nvr-panel-grabaciones/nvr-panel-metricas, anidados bajo
+// "nvr-panel" (las dos sub-secciones del Panel NVR).
 const PANELES_POR_ROL = {
   avanzado: [
     'dashboard', 'recursos', 'accesos-nvr', 'usuarios', 'nvr-panel',
     'recursos-camaras', 'recursos-nvrs', 'recursos-edificios', 'recursos-pisos', 'recursos-areas',
+    'nvr-panel-grabaciones', 'nvr-panel-metricas',
   ],
   // sistemas_lectura solo llega a Recursos → Camaras y NVR, nunca a
   // Edificios/Pisos/Areas ni a las acciones de alta/edicion (esas rutas del
   // backend siguen exclusivas de admin/avanzado — ver camaras.js/nvrs.js —
   // asi que en Crud.jsx los botones de Agregar/Editar quedan ocultos para
   // este rol, no solo el panel).
-  sistemas_lectura: ['dashboard', 'recursos', 'recursos-camaras', 'recursos-nvrs', 'accesos-nvr', 'nvr-panel'],
+  sistemas_lectura: [
+    'dashboard', 'recursos', 'recursos-camaras', 'recursos-nvrs', 'accesos-nvr', 'nvr-panel',
+    'nvr-panel-grabaciones', 'nvr-panel-metricas',
+  ],
   direccion: ['accesos-nvr'],
   mando_medio: ['camaras', 'mis-solicitudes'],
 };
@@ -41,6 +47,8 @@ const PANEL_LABEL = {
   'recursos-pisos': 'Pisos',
   'recursos-areas': 'Areas',
   'nvr-panel': 'Panel NVR',
+  'nvr-panel-grabaciones': 'Grabaciones',
+  'nvr-panel-metricas': 'Metricas',
 };
 
 const TABLAS_COLUMNAS = {

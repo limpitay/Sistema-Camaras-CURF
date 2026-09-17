@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import client from '../api/client';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { quitarAcentos } from '../utils/texto';
+
+const TABS = [
+  { id: 'grabaciones', label: 'Grabaciones' },
+  { id: 'metricas', label: 'Metricas' },
+];
 
 // Panel NVR: a diferencia de Recursos > NVR (inventario cargado a mano), esto
 // consulta el equipo en vivo por ISAPI (ver backend/src/utils/isapiClient.js)
@@ -240,73 +246,162 @@ function CalculadoraRetencion({ nvrs, detallePorNvr }) {
   );
 }
 
-// Barra horizontal simple (magnitud, un solo color) -- comparar un valor
-// entre entidades no necesita paleta categorica, la identidad ya la da la
-// etiqueta de cada fila, no el color.
-function BarraComparativa({ filas, valorKey, unidad, decimales = 0 }) {
-  const max = Math.max(1, ...filas.map((f) => f[valorKey] || 0));
+// Mismo set de 4 colores ya validado (CVD/contraste) en Dashboard.jsx
+// (COLORES_MARCA) -- se reusa aca en vez de armar y validar una paleta
+// categorica aparte para las mismas 4 tarjetas de NVR.
+const COLORES_NVR = ['#3987e5', '#d95926', '#199e70', '#c98500'];
+
+// El color de cada NVR sale de su nombre en orden alfabetico, no del orden
+// en que llegan del backend -- si el dia de manana cambia ese orden, el
+// color de cada NVR no se reacomoda con el (mismo criterio que Dashboard.jsx).
+function colorPorHostname(hostname, ordenAlfabetico) {
+  const i = ordenAlfabetico.indexOf(hostname);
+  return COLORES_NVR[i % COLORES_NVR.length];
+}
+
+// Linea de tiempo del espacio ocupado por NVR (ultimos ~60 dias). Los puntos
+// solo existen los dias que alguien actualizo ese NVR -- no es una medicion
+// continua, por eso se marcan los puntos reales en vez de solo la linea.
+function GraficoHistorialStorage({ nvrs, historial }) {
+  const ancho = 640;
+  const alto = 260;
+  const margen = { top: 12, right: 16, bottom: 28, left: 46 };
+  const [hoverFecha, setHoverFecha] = useState(null);
+
+  const ordenAlfabetico = useMemo(() => nvrs.map((n) => n.hostname).sort(), [nvrs]);
+
+  const series = useMemo(() => nvrs
+    .map((nvr) => {
+      const puntos = (historial[nvr.id] || []).map((p) => ({ fecha: p.fecha, valor: p.ocupadoGb }));
+      return puntos.length ? { hostname: nvr.hostname, color: colorPorHostname(nvr.hostname, ordenAlfabetico), puntos } : null;
+    })
+    .filter(Boolean), [nvrs, historial, ordenAlfabetico]);
+
+  const todasLasFechas = useMemo(() => {
+    const set = new Set();
+    series.forEach((s) => s.puntos.forEach((p) => set.add(p.fecha)));
+    return [...set].sort();
+  }, [series]);
+
+  if (series.length === 0) {
+    return (
+      <div className="text-body-secondary small">
+        Todavia no hay puntos guardados. Se suma uno por NVR cada dia que lo actualices (arriba, en Grabaciones).
+      </div>
+    );
+  }
+
+  const minFecha = todasLasFechas[0];
+  const maxFecha = todasLasFechas[todasLasFechas.length - 1];
+  const tMin = new Date(minFecha).getTime();
+  const rangoT = Math.max(1, new Date(maxFecha).getTime() - tMin);
+  const maxValor = Math.max(1, ...series.flatMap((s) => s.puntos.map((p) => p.valor))) * 1.08;
+
+  const x = (fecha) => margen.left + ((new Date(fecha).getTime() - tMin) / rangoT) * (ancho - margen.left - margen.right);
+  const y = (valor) => (alto - margen.bottom) - (valor / maxValor) * (alto - margen.top - margen.bottom);
+
+  const manejarMouseMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = ((e.clientX - rect.left) / rect.width) * ancho;
+    let mejor = todasLasFechas[0];
+    let mejorDist = Infinity;
+    todasLasFechas.forEach((f) => {
+      const d = Math.abs(x(f) - px);
+      if (d < mejorDist) { mejorDist = d; mejor = f; }
+    });
+    setHoverFecha(mejor);
+  };
+
   return (
-    <div className="d-flex flex-column gap-2">
-      {filas.map((f) => (
-        <div key={f.hostname} className="d-flex align-items-center gap-2">
-          <div className="small text-body-secondary text-truncate" style={{ width: 90, flexShrink: 0 }}>{f.hostname}</div>
-          <div className="flex-grow-1 bg-body-tertiary rounded" style={{ height: 18 }}>
-            <div className="bg-primary rounded h-100" style={{ width: `${Math.max(2, ((f[valorKey] || 0) / max) * 100)}%` }} />
-          </div>
-          <div className="small font-monospace text-end" style={{ width: 84, flexShrink: 0 }}>
-            {num(f[valorKey], decimales)} {unidad}
-          </div>
-        </div>
-      ))}
+    <div>
+      <svg
+        viewBox={`0 0 ${ancho} ${alto}`}
+        className="w-100"
+        role="img"
+        aria-label="Espacio ocupado por NVR en el tiempo"
+        onMouseMove={manejarMouseMove}
+        onMouseLeave={() => setHoverFecha(null)}
+      >
+        {[0, 0.5, 1].map((f) => {
+          const valor = maxValor * f;
+          return (
+            <g key={f}>
+              <line x1={margen.left} x2={ancho - margen.right} y1={y(valor)} y2={y(valor)} stroke="var(--bs-border-color)" strokeWidth="1" />
+              <text x={margen.left - 6} y={y(valor)} textAnchor="end" dominantBaseline="middle" fontSize="9" fill="var(--bs-secondary-color)">
+                {num(valor)}
+              </text>
+            </g>
+          );
+        })}
+        <text x={x(minFecha)} y={alto - 8} fontSize="9" fill="var(--bs-secondary-color)">{formatearSoloFecha(minFecha)}</text>
+        <text x={x(maxFecha)} y={alto - 8} fontSize="9" fill="var(--bs-secondary-color)" textAnchor="end">{formatearSoloFecha(maxFecha)}</text>
+
+        {hoverFecha && (
+          <line x1={x(hoverFecha)} x2={x(hoverFecha)} y1={margen.top} y2={alto - margen.bottom} stroke="var(--bs-secondary-color)" strokeWidth="1" strokeDasharray="3,3" />
+        )}
+
+        {series.map((s) => (
+          <g key={s.hostname}>
+            <path
+              d={s.puntos.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(p.fecha)} ${y(p.valor)}`).join(' ')}
+              fill="none"
+              stroke={s.color}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {s.puntos.map((p) => (
+              <circle key={p.fecha} cx={x(p.fecha)} cy={y(p.valor)} r={hoverFecha === p.fecha ? 4 : 2.5} fill={s.color} />
+            ))}
+          </g>
+        ))}
+      </svg>
+
+      <div className="d-flex flex-wrap gap-3 mt-2">
+        {series.map((s) => {
+          const punto = hoverFecha ? s.puntos.find((p) => p.fecha === hoverFecha) : null;
+          return (
+            <div key={s.hostname} className="d-flex align-items-center gap-2 small">
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: s.color, display: 'inline-block', flexShrink: 0 }} />
+              {s.hostname}
+              {hoverFecha && <span className="font-monospace text-body-secondary">{punto ? `${num(punto.valor)} GB` : 'sin dato'}</span>}
+            </div>
+          );
+        })}
+      </div>
+      {hoverFecha && <div className="small text-body-secondary mt-1">{formatearSoloFecha(hoverFecha)}</div>}
     </div>
   );
 }
 
-// Comparativa entre NVR (no evolucion en el tiempo -- no hay historial
-// guardado todavia, son los valores del ultimo "Actualizar" de cada uno).
-function SeccionMetricas({ nvrs, detallePorNvr }) {
-  const filas = useMemo(() => nvrs
-    .map((nvr) => {
-      const detalle = detallePorNvr[nvr.id];
-      if (!detalle?.estado || !detalle?.canales) return null;
-      const st = calcularStorage(detalle.estado);
-      if (!st) return null;
-      const usados = detalle.canales.filter((c) => c.online).length;
-      const gbDiaProm = promedioGbDia(detalle.canales);
-      return {
-        hostname: nvr.hostname,
-        ocupadoGb: st.usadoGb,
-        consumoDiaGb: gbDiaProm != null ? gbDiaProm * usados : 0,
-      };
-    })
-    .filter(Boolean), [nvrs, detallePorNvr]);
+// Evolucion del espacio ocupado (no una comparativa del dia de hoy como
+// antes -- ver GraficoHistorialStorage). Un punto por NVR por dia, solo los
+// dias que alguien lo actualiza; el historial recien arranca desde que se
+// sumo esta pantalla, no hay como completar el pasado.
+function SeccionMetricas({ nvrs }) {
+  const [historial, setHistorial] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    client.get('/nvrs/historial?dias=60')
+      .then((res) => setHistorial(res.data))
+      .catch((err) => setError(err.response?.data?.error || 'No se pudo consultar el historial.'));
+  }, []);
 
   return (
-    <section className="mb-4">
-      <h2 className="h5 fw-bold mb-1">Metricas</h2>
+    <section>
       <p className="text-body-secondary small mb-3">
-        Comparativa entre NVR con los valores del ultimo "Actualizar" de cada uno -- todavia no se guarda un
-        historial dia a dia, asi que esto no es una evolucion en el tiempo.
+        Espacio ocupado por NVR, ultimos 60 dias. Un punto por NVR por dia, solo en los dias que alguien lo
+        actualiza (en Grabaciones) -- no es una medicion continua, y el historial recien empieza a partir de
+        que se sumo esta pantalla.
       </p>
-      {filas.length === 0 ? (
-        <div className="text-body-secondary small">Actualiza al menos un NVR (arriba, en Grabaciones) para ver metricas.</div>
-      ) : (
-        <div className="row g-3">
-          <div className="col-12 col-lg-6">
-            <div className="card shadow-sm h-100">
-              <div className="card-body">
-                <div className="fw-semibold small mb-3">Espacio ocupado por NVR (GB)</div>
-                <BarraComparativa filas={filas} valorKey="ocupadoGb" unidad="GB" />
-              </div>
-            </div>
-          </div>
-          <div className="col-12 col-lg-6">
-            <div className="card shadow-sm h-100">
-              <div className="card-body">
-                <div className="fw-semibold small mb-3">Consumo diario estimado por NVR (GB/d)</div>
-                <BarraComparativa filas={filas} valorKey="consumoDiaGb" unidad="GB/d" decimales={1} />
-              </div>
-            </div>
+      {error && <div className="alert alert-danger py-2 small">{error}</div>}
+      {!historial && !error && <div className="text-body-secondary small">Cargando historial...</div>}
+      {historial && (
+        <div className="card shadow-sm">
+          <div className="card-body">
+            <div className="fw-semibold small mb-3">Espacio ocupado (GB)</div>
+            <GraficoHistorialStorage nvrs={nvrs} historial={historial} />
           </div>
         </div>
       )}
@@ -316,6 +411,30 @@ function SeccionMetricas({ nvrs, detallePorNvr }) {
 
 export default function Nvr() {
   const { user } = useAuth();
+  // El tab activo vive en la URL (?tab=...) para que el sidebar (Layout,
+  // grupo "Panel NVR" desplegable) pueda linkear directo a cada uno -- mismo
+  // patron que los tabs de Recursos en Crud.jsx.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabIds = TABS.map((t) => t.id);
+  const [tab, setTabState] = useState(() => {
+    const desdeUrl = searchParams.get('tab');
+    return tabIds.includes(desdeUrl) ? desdeUrl : 'grabaciones';
+  });
+  const setTab = (nuevoTab) => {
+    setTabState(nuevoTab);
+    setSearchParams((prev) => {
+      const siguiente = new URLSearchParams(prev);
+      siguiente.set('tab', nuevoTab);
+      return siguiente;
+    }, { replace: true });
+  };
+  useEffect(() => {
+    const desdeUrl = searchParams.get('tab');
+    if (tabIds.includes(desdeUrl) && desdeUrl !== tab) setTabState(desdeUrl);
+    else if (!desdeUrl) setSearchParams((prev) => { const s = new URLSearchParams(prev); s.set('tab', tab); return s; }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   const [nvrs, setNvrs] = useState([]);
   const [detallePorNvr, setDetallePorNvr] = useState({});
   const [cargandoTodo, setCargandoTodo] = useState(false);
@@ -531,6 +650,18 @@ export default function Nvr() {
         </div>
       )}
 
+      <ul className="nav nav-tabs mt-3 mb-3">
+        {TABS.map((t) => (
+          <li className="nav-item" key={t.id}>
+            <button className={`nav-link ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>{t.label}</button>
+          </li>
+        ))}
+      </ul>
+
+      {tab === 'metricas' && <SeccionMetricas nvrs={nvrsConApi} />}
+
+      {tab === 'grabaciones' && (
+      <>
       {nvrsSinApi > 0 && (
         <div className="small text-body-secondary mt-2">
           {nvrsSinApi} NVR Dahua no se listan aca -- ISAPI es protocolo Hikvision, todavia no hay forma de consultarlos
@@ -564,8 +695,6 @@ export default function Nvr() {
       </div>
 
       <section className="mb-4">
-        <h2 className="h5 fw-bold mb-1">Grabaciones</h2>
-        <p className="text-body-secondary small mb-3">Detalle en vivo por NVR: almacenamiento, canales y la tabla de grabacion de cada canal.</p>
         <div className="row g-3">
           {nvrsConApi.length === 0 && <div className="col-12 text-body-secondary">Sin NVR con API disponible en Recursos.</div>}
           {nvrsConApi.map((nvr) => {
@@ -725,9 +854,9 @@ export default function Nvr() {
         </div>
       </section>
 
-      <SeccionMetricas nvrs={nvrsConApi} detallePorNvr={detallePorNvr} />
-
       <CalculadoraRetencion nvrs={nvrsConApi} detallePorNvr={detallePorNvr} />
+      </>
+      )}
     </Layout>
   );
 }

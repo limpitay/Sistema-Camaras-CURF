@@ -90,11 +90,13 @@ export default function RolesPermisos() {
   }
 
   // Las 5 pestanas de adentro de Recursos (recursos-camaras, recursos-nvrs...)
-  // se listan anidadas bajo "Recursos", no como paneles sueltos mas — ver
-  // permisosRegistro.js.
+  // y las 2 del Panel NVR (nvr-panel-grabaciones/metricas) se listan anidadas
+  // bajo su panel padre, no como paneles sueltos mas — ver permisosRegistro.js.
+  const esSubPanel = (p) => p.startsWith('recursos-') || p.startsWith('nvr-panel-');
   const panelesDelRolTodos = registro.panelesPorRol[rolActivo] || [];
-  const panelesDelRol = panelesDelRolTodos.filter((p) => !p.startsWith('recursos-'));
+  const panelesDelRol = panelesDelRolTodos.filter((p) => !esSubPanel(p));
   const subPanelesRecursos = panelesDelRolTodos.filter((p) => p.startsWith('recursos-'));
+  const subPanelesNvr = panelesDelRolTodos.filter((p) => p.startsWith('nvr-panel-'));
 
   // ¿Este panel esta tildado ahora mismo para el rol activo? (en base al
   // estado local, no al guardado — asi Columnas/Filtros reaccionan al toque
@@ -150,9 +152,9 @@ export default function RolesPermisos() {
                       />
                       {registro.panelLabel[panel] || panel}
                     </label>
-                    {panel === 'recursos' && subPanelesRecursos.length > 0 && (
+                    {(panel === 'recursos' ? subPanelesRecursos : panel === 'nvr-panel' ? subPanelesNvr : []).length > 0 && (
                       <div className="ps-4 pb-2 d-flex flex-column gap-1">
-                        {subPanelesRecursos.map((sub) => {
+                        {(panel === 'recursos' ? subPanelesRecursos : subPanelesNvr).map((sub) => {
                           const subVisible = !panelesOcultos.has(claveP(rolActivo, sub));
                           return (
                             <label key={sub} className="d-flex align-items-center gap-2 small">
