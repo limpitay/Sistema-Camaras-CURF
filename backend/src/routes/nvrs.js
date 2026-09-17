@@ -2,13 +2,20 @@ const express = require('express');
 const db = require('../db');
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
-const {
-  obtenerInfoDispositivo, obtenerEstadoDiscos, obtenerEstadoCanales, obtenerNombresCanales, buscarGrabacionMasAntigua,
-  buscarGrabacionMasReciente, obtenerParametrosVideoCanal,
-} = require('../utils/isapiClient');
+const isapiClient = require('../utils/isapiClient');
+const dahuaClient = require('../utils/dahuaClient');
 const { listarCamarasArtemis } = require('../utils/artemisClient');
 
 const router = express.Router();
+
+// Hikvision habla ISAPI, Dahua habla su propio CGI (ver dahuaClient.js) --
+// cada NVR usa el cliente que corresponde a su marca. dahuaClient cubre
+// menos (todavia no hay busqueda de grabaciones ni bitrate por canal para
+// Dahua), asi que quien llama tiene que revisar si la funcion existe antes
+// de usarla en vez de asumir paridad total con ISAPI.
+function clienteDeNvr(nvr) {
+  return /hikvision/i.test(nvr.marca || '') ? isapiClient : dahuaClient;
+}
 
 // Un NVR agrupa muchas camaras (RF-04): cantidad_camaras se calcula al
 // vuelo aca, no se guarda como columna, para que nunca quede desactualizada.
@@ -130,16 +137,17 @@ router.get('/camaras-en-vivo', auth, requireRole('admin', 'avanzado', 'sistemas_
   // varios a la vez (o varios canales del mismo NVR) los hace rechazar
   // conexiones -- ver mismo criterio en /:id/canales.
   for (const nvr of nvrs) {
+    const cliente = clienteDeNvr(nvr);
     let estadoPorCanal;
     try {
-      estadoPorCanal = new Map((await obtenerEstadoCanales(nvr)).map((c) => [c.canal, c]));
+      estadoPorCanal = new Map((await cliente.obtenerEstadoCanales(nvr)).map((c) => [c.canal, c]));
     } catch (err) {
       errores.push(`${nvr.hostname}: ${err.message}`);
       continue;
     }
     let nombrePorCanal = new Map();
     try {
-      nombrePorCanal = new Map((await obtenerNombresCanales(nvr)).map((c) => [c.canal, c.nombre]));
+      nombrePorCanal = new Map((await cliente.obtenerNombresCanales(nvr)).map((c) => [c.canal, c.nombre]));
     } catch { /* seguimos sin nombre si falla */ }
 
     for (let canal = 1; canal <= nvr.canales_totales; canal += 1) {
@@ -151,7 +159,7 @@ router.get('/camaras-en-vivo', auth, requireRole('admin', 'avanzado', 'sistemas_
         canal,
         hostname: nombreCrudo,
         ip: estado?.ip ?? null,
-        marca: 'Hikvision',
+        marca: nvr.marca,
         online: estado?.online ?? null,
         descripcion: descripcionPorHostname.get(nombreCrudo) || nombreCrudo,
       });
@@ -296,7 +304,8 @@ router.get('/:id/estado', auth, requireRole('admin', 'avanzado', 'sistemas_lectu
   if (!nvr) return res.status(404).json({ error: 'NVR no encontrado' });
 
   try {
-    const [dispositivo, discos] = await Promise.all([obtenerInfoDispositivo(nvr), obtenerEstadoDiscos(nvr)]);
+    const cliente = clienteDeNvr(nvr);
+    const [dispositivo, discos] = await Promise.all([cliente.obtenerInfoDispositivo(nvr), cliente.obtenerEstadoDiscos(nvr)]);
     const estado = { dispositivo, discos };
     guardarEstadoSnapshot(nvr.id, estado, req.user.nombre);
     guardarHistorialDiario(nvr.id, estado);
@@ -325,9 +334,11 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
   // canal, asi que alcanza con que coincida con camaras.ip.
   const camarasPorIp = new Map(camarasDelNvr.filter((c) => c.ip).map((c) => [c.ip, c]));
 
+  const cliente = clienteDeNvr(nvr);
+
   let estadoPorCanal = new Map();
   try {
-    estadoPorCanal = new Map((await obtenerEstadoCanales(nvr)).map((c) => [c.canal, c]));
+    estadoPorCanal = new Map((await cliente.obtenerEstadoCanales(nvr)).map((c) => [c.canal, c]));
   } catch (err) {
     return res.status(502).json({ error: `No se pudo consultar el estado de canales del NVR: ${err.message}` });
   }
@@ -337,7 +348,7 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
   // es un dato de mas, no critico como el estado online/offline.
   let nombrePorCanal = new Map();
   try {
-    nombrePorCanal = new Map((await obtenerNombresCanales(nvr)).map((c) => [c.canal, c.nombre]));
+    nombrePorCanal = new Map((await cliente.obtenerNombresCanales(nvr)).map((c) => [c.canal, c.nombre]));
   } catch { /* seguimos sin nombre si falla */ }
 
   const descripcionPorHostname = await obtenerDescripcionPorHostname();
@@ -352,19 +363,24 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
     let grabacionMasAntigua = null;
     let grabacionMasReciente = null;
     let error = null;
-    try {
-      const busqueda = await buscarGrabacionMasAntigua(nvr, canal);
-      grabacionMasAntigua = busqueda?.inicio || null;
-      // Canal sin camara asignada: lo que haya grabado quedo fijo en el
-      // tiempo (ver buscarGrabacionMasReciente) -- ahi interesa hasta cuando
-      // llego esa grabacion vieja, no "hoy - mas antigua" (eso crece solo).
-      if (busqueda && estado?.online == null) {
-        grabacionMasReciente = busqueda.numOfMatches > 1
-          ? await buscarGrabacionMasReciente(nvr, canal, busqueda.numOfMatches)
-          : grabacionMasAntigua;
+    // Busqueda de grabaciones: todavia solo esta diagnosticada para
+    // Hikvision/ISAPI (ver dahuaClient.js) -- en Dahua estos campos quedan
+    // en null hasta que se agregue el endpoint correspondiente.
+    if (cliente.buscarGrabacionMasAntigua) {
+      try {
+        const busqueda = await cliente.buscarGrabacionMasAntigua(nvr, canal);
+        grabacionMasAntigua = busqueda?.inicio || null;
+        // Canal sin camara asignada: lo que haya grabado quedo fijo en el
+        // tiempo (ver buscarGrabacionMasReciente) -- ahi interesa hasta cuando
+        // llego esa grabacion vieja, no "hoy - mas antigua" (eso crece solo).
+        if (busqueda && estado?.online == null) {
+          grabacionMasReciente = busqueda.numOfMatches > 1
+            ? await cliente.buscarGrabacionMasReciente(nvr, canal, busqueda.numOfMatches)
+            : grabacionMasAntigua;
+        }
+      } catch (err) {
+        error = err.message;
       }
-    } catch (err) {
-      error = err.message;
     }
     const diasDisponibles = grabacionMasAntigua
       ? Math.floor((Date.now() - new Date(grabacionMasAntigua).getTime()) / 86400000)
@@ -374,11 +390,12 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
       : null;
 
     // Bitrate solo para canales con camara conectada -- para los vacios no
-    // hay stream que consultar y es un pedido ISAPI menos por canal.
+    // hay stream que consultar y es un pedido menos por canal. Tambien sin
+    // diagnosticar para Dahua todavia (ver dahuaClient.js).
     let video = null;
-    if (estado?.online) {
+    if (estado?.online && cliente.obtenerParametrosVideoCanal) {
       try {
-        video = await obtenerParametrosVideoCanal(nvr, canal);
+        video = await cliente.obtenerParametrosVideoCanal(nvr, canal);
       } catch { /* dato de mas, no bloquea el resto */ }
     }
 

@@ -923,10 +923,11 @@ export default function Crud() {
                           </div>
                         </div>
 
-                        <h3 className="h6 fw-semibold mb-2 mt-4">Login ISAPI (Panel NVR)</h3>
+                        <h3 className="h6 fw-semibold mb-2 mt-4">Login del NVR (Panel NVR)</h3>
                         <p className="small text-body-secondary mb-2">
-                          Usuario admin del propio equipo, para que el Panel NVR pueda consultarlo en vivo (info,
-                          discos, grabaciones). No tiene relacion con las cuentas de Accesos NVR.
+                          Usuario admin del propio equipo (ISAPI en Hikvision, CGI en Dahua), para que el Panel NVR
+                          pueda consultarlo en vivo (info, discos, grabaciones). No tiene relacion con las cuentas de
+                          Accesos NVR.
                         </p>
                         <div className="row g-3">
                           <div className="col-6">

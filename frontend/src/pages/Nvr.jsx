@@ -463,11 +463,11 @@ export default function Nvr() {
     return () => document.removeEventListener('click', alClickear);
   }, []);
 
-  // ISAPI (lo que usa este panel para consultar en vivo) es protocolo
-  // Hikvision -- los NVR Dahua del inventario no responden a esto, asi que
-  // por ahora se listan aparte y no entran a este dashboard.
-  const nvrsConApi = useMemo(() => nvrs.filter((n) => /hikvision/i.test(n.marca || '')), [nvrs]);
-  const nvrsSinApi = nvrs.length - nvrsConApi.length;
+  // Hikvision habla ISAPI y Dahua su propio CGI (ver backend/src/routes/nvrs.js
+  // > clienteDeNvr) -- las dos marcas entran aca por igual. Dahua todavia
+  // cubre menos (sin busqueda de grabaciones ni bitrate por canal), asi que
+  // esos campos van a quedar en "—" para esos NVR hasta que se agreguen.
+  const nvrsConApi = nvrs;
 
   // En exito devuelve el snapshot nuevo completo; en error devuelve solo el
   // error, sin tocar estado/canales -- asi una consulta fallida no borra el
@@ -589,8 +589,8 @@ export default function Nvr() {
         <div>
           <h1 className="h4 fw-bold mb-1">Panel NVR</h1>
           <p className="text-body-secondary small mb-0" style={{ maxWidth: '60ch' }}>
-            Estado en vivo de cada NVR (ISAPI): discos, canales ocupados, retencion estimada y camaras. No se consulta
-            nada solo -- se dispara a mano para no bombardear equipos embebidos.
+            Estado en vivo de cada NVR (Hikvision/ISAPI o Dahua/CGI segun la marca): discos, canales ocupados,
+            retencion estimada y camaras. No se consulta nada solo -- se dispara a mano para no bombardear equipos embebidos.
           </p>
         </div>
         <div className="d-flex flex-column align-items-end gap-1">
@@ -662,13 +662,6 @@ export default function Nvr() {
 
       {tab === 'grabaciones' && (
       <>
-      {nvrsSinApi > 0 && (
-        <div className="small text-body-secondary mt-2">
-          {nvrsSinApi} NVR Dahua no se listan aca -- ISAPI es protocolo Hikvision, todavia no hay forma de consultarlos
-          en vivo. Siguen enteros en Recursos &gt; NVR.
-        </div>
-      )}
-
       <div className="row row-cols-2 row-cols-md-5 g-3 mt-1 mb-4">
         <KpiTile label="NVR" value={nvrsConApi.length} sub={`${resumen.canalesInstalados} canales instalados`} />
         <KpiTile

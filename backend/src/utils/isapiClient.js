@@ -1,92 +1,16 @@
-const http = require('http');
 const crypto = require('crypto');
 const { XMLParser } = require('fast-xml-parser');
+const { pedidoDigest } = require('./httpDigest');
 
 const parser = new XMLParser();
 
-function md5(texto) {
-  return crypto.createHash('md5').update(texto).digest('hex');
-}
-
 // ISAPI (los NVR/DVR Hikvision, a diferencia de HikCentral/Artemis) exige
-// Digest Auth, no Basic ni firma HMAC — RFC 2617 clasico: primer pedido sin
-// credenciales, el dispositivo responde 401 con los parametros del desafio
-// en WWW-Authenticate, y recien ahi se arma la respuesta con esos datos.
-function parsearDesafioDigest(header) {
-  if (!header || !header.startsWith('Digest ')) return null;
-  const params = {};
-  const regex = /(\w+)=(?:"([^"]*)"|([^,]+))/g;
-  let m;
-  while ((m = regex.exec(header))) {
-    params[m[1]] = m[2] !== undefined ? m[2] : m[3];
-  }
-  return params;
-}
-
-function construirAuthorization({ usuario, contrasena, method, uri, desafio }) {
-  const ha1 = md5(`${usuario}:${desafio.realm}:${contrasena}`);
-  const ha2 = md5(`${method}:${uri}`);
-  let response;
-  let extra = '';
-  if (desafio.qop) {
-    const nc = '00000001';
-    const cnonce = crypto.randomBytes(8).toString('hex');
-    response = md5(`${ha1}:${desafio.nonce}:${nc}:${cnonce}:${desafio.qop}:${ha2}`);
-    extra = `, qop=${desafio.qop}, nc=${nc}, cnonce="${cnonce}"`;
-  } else {
-    response = md5(`${ha1}:${desafio.nonce}:${ha2}`);
-  }
-  const opaque = desafio.opaque ? `, opaque="${desafio.opaque}"` : '';
-  return `Digest username="${usuario}", realm="${desafio.realm}", nonce="${desafio.nonce}", uri="${uri}", response="${response}"${extra}${opaque}`;
-}
-
-function pedido(opciones, body) {
-  return new Promise((resolve, reject) => {
-    const req = http.request(opciones, (res) => {
-      const chunks = [];
-      res.on('data', (c) => chunks.push(c));
-      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString('utf8') }));
-    });
-    req.on('error', reject);
-    if (body) req.write(body);
-    req.end();
-  });
-}
-
-// GET o POST a un path ISAPI de un NVR, con el ida-y-vuelta de Digest Auth.
-// `nvr` necesita `ip`, `usuario`, `contrasena` (ver migracion 028). El primer
-// pedido (el que va a rebotar con 401 para conseguir el desafio) se manda
-// SIN el body: mandarlo en las dos vueltas confunde el parser XML de estos
-// NVR, que llega a leer los dos bodies pegados y tira "two root tags" —
-// mismo criterio que usa curl --digest con -d.
-async function isapiRequest(nvr, method, path, body) {
-  if (!nvr.ip || !nvr.usuario || !nvr.contrasena) {
-    throw new Error(`El NVR "${nvr.hostname}" no tiene IP/usuario/contrasena ISAPI cargados`);
-  }
-  const headersBase = body ? { 'Content-Type': 'application/xml' } : {};
-
-  const primeraRespuesta = await pedido({ hostname: nvr.ip, port: 80, path, method, headers: headersBase });
-  if (primeraRespuesta.status !== 401) {
-    return primeraRespuesta;
-  }
-
-  const desafio = parsearDesafioDigest(primeraRespuesta.headers['www-authenticate']);
-  if (!desafio) {
-    throw new Error(`El NVR "${nvr.hostname}" devolvio 401 sin desafio Digest valido`);
-  }
-  const authorization = construirAuthorization({ usuario: nvr.usuario, contrasena: nvr.contrasena, method, uri: path, desafio });
-  const headersFinales = { ...headersBase, Authorization: authorization };
-  if (body) headersFinales['Content-Length'] = Buffer.byteLength(body);
-
-  if (process.env.ISAPI_DEBUG === 'true') {
-    console.error('[isapi debug] enviando method=%s path=%s headers=%o body=%s', method, path, headersFinales, JSON.stringify(body));
-  }
-
-  return pedido({ hostname: nvr.ip, port: 80, path, method, headers: headersFinales }, body);
-}
-
+// Digest Auth (ver httpDigest.js, compartido con dahuaClient.js) y habla XML.
 async function isapiXml(nvr, method, path, body) {
-  const respuesta = await isapiRequest(nvr, method, path, body);
+  if (process.env.ISAPI_DEBUG === 'true') {
+    console.error('[isapi debug] enviando method=%s path=%s body=%s', method, path, JSON.stringify(body));
+  }
+  const respuesta = await pedidoDigest(nvr, method, path, body, { contentType: 'application/xml' });
   if (respuesta.status === 401) {
     throw new Error(`Usuario/contrasena ISAPI rechazados por el NVR "${nvr.hostname}"`);
   }
