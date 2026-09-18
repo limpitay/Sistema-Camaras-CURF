@@ -61,17 +61,27 @@ function parseDiscos(raw) {
   return discos;
 }
 
-// Solo se cuenta la particion "0" de cada disco fisico (la de grabacion real
-// -- las demas suelen ser metadata/indices internos), mismo criterio que
-// dahua_NVR_status.py. Bytes -> MB (/1024/1024) para usar la misma unidad
-// que ISAPI (capacidadMb/libreMb) en el resto de la app.
+// Cada disco fisico puede reportar varias particiones/volumenes (Detail[N])
+// -- una chica de sistema/base de datos y una grande que es la de video real.
+// El indice de esa particion grande NO es fijo entre equipos (en un NVR
+// aparecio en Detail[0], en otro en Detail[2]: verificado contra un NVR real
+// que con indice fijo "0" daba 2,3 TB cuando el propio NVR mostraba 9,07 TB
+// de esa misma disco por su interfaz web) -- asi que en vez de asumir un
+// indice, se toma la particion con mayor TotalBytes de cada disco, que en la
+// practica siempre es la de grabacion (la de sistema es ordenes de magnitud
+// mas chica). Bytes -> MB (/1024/1024) para usar la misma unidad que ISAPI
+// (capacidadMb/libreMb) en el resto de la app.
 async function obtenerEstadoDiscos(nvr) {
   const raw = await dahuaCgi(nvr, 'storageDevice.cgi', { action: 'getDeviceAllInfo' });
   const discos = parseDiscos(raw);
   return Object.entries(discos).map(([id, disco]) => {
-    const p0 = disco.particiones['0'] || {};
-    const totalBytes = Number(p0.TotalBytes) || 0;
-    const usadoBytes = Number(p0.UsedBytes) || 0;
+    const particiones = Object.values(disco.particiones || {});
+    const principal = particiones.reduce((mayor, p) => {
+      const total = Number(p.TotalBytes) || 0;
+      return total > (mayor ? Number(mayor.TotalBytes) || 0 : -1) ? p : mayor;
+    }, null) || {};
+    const totalBytes = Number(principal.TotalBytes) || 0;
+    const usadoBytes = Number(principal.UsedBytes) || 0;
     return {
       id: disco.Name || id,
       capacidadMb: totalBytes / 1024 / 1024,
