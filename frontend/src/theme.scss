@@ -1,28 +1,52 @@
-// Paleta y tipografia tomadas de https://curf.com.ar (Clinica Reina Fabiola):
-// --main-blue-color / --main-light-blue-color / --main-yellow-color en su CSS,
-// y Merriweather + Merriweather Sans como fuentes. Se recompila Bootstrap con
-// estas variables para que btn-primary, bg-primary, badges, etc. usen
-// directamente los colores institucionales, en vez de pisarlos con CSS aparte.
+// Paleta y tipografia tomadas de un dashboard de referencia (fondo casi
+// negro, acentos naranja/verde/ambar/rojo/violeta, Space Grotesk + Inter +
+// IBM Plex Mono) a pedido explicito, en reemplazo de la paleta/tipografia
+// institucional que tenia antes este archivo (tomada de curf.com.ar). Se
+// recompila Bootstrap con estas variables para que btn-primary, bg-primary,
+// badges, etc. usen esto directo, en vez de pisarlos con CSS aparte.
 //
-// El panel usa el modo oscuro nativo de Bootstrap (ver data-bs-theme="dark"
-// en index.html): fondo gris carbon, no negro puro, con texto casi blanco
-// (~13:1 de contraste) — pensado para que el personal de mayor edad lo pueda
-// leer comodo sin encandilarse. $primary se aclara respecto del azul
-// institucional original (#002856) porque ese tono es casi ilegible como
-// fondo de boton sobre una pagina oscura.
-$primary: #1a5f96;
-$secondary: #2f7cc2;
-$warning: #e2b900;
-$success: #2f9e5c;
-$danger: #d9534f;
-$info: #4fb3c5;
+// El panel sigue en el modo oscuro nativo de Bootstrap (ver data-bs-theme=
+// "dark" en index.html, sin toggle a claro) -- por eso los tokens de
+// body/borde se pisan en su variante "-dark" (la unica que la app llega a
+// usar), no la base.
+// success/warning/danger no son los tonos crudos del mockup de referencia --
+// esos fallaban el chequeo de banda de luminosidad para fondo oscuro de la
+// skill de dataviz (quedaban demasiado claros). Se reemplazan por la paleta
+// de "status" ya validada de esa misma skill (references/palette.md), mas
+// oscura pero del mismo tono, que si pasa los 5 checks (banda de luminosidad,
+// piso de croma, separacion CVD, piso a color normal, contraste >=3:1) contra
+// la superficie real de las tarjetas (#12181f, $card-bg mas abajo).
+$primary: #e8543f;
+$secondary: #3a4552;
+$success: #0ca30c;
+$warning: #fab219;
+$danger: #d03b3b;
+$info: #3987e5;
+// $dahua distingue NVR Dahua de Hikvision (Nvr.jsx) -- slot violeta de la
+// paleta categorica ya validada (misma fuente que success/warning/danger),
+// no el violeta crudo del mockup.
+$dahua: #9085e9;
 
-$font-family-sans-serif: 'Merriweather Sans', system-ui, -apple-system, sans-serif;
-$headings-font-family: 'Merriweather', Georgia, serif;
+$body-bg-dark: #0a0e13;
+$body-color-dark: #e7edf3;
+$body-secondary-color-dark: #8a97a6;
+$body-secondary-bg-dark: #1a222b;
+$body-tertiary-color-dark: #576270;
+$body-tertiary-bg-dark: #1a222b;
+$border-color-dark: #232d38;
+// $card-bg no tiene variante "-dark" en Bootstrap (por defecto sigue al
+// body-bg) -- se pisa directo para que las tarjetas se despeguen del fondo
+// de pagina (superficie mas clara), como en el dashboard de referencia.
+$card-bg: #12181f;
+
+$font-family-sans-serif: 'Inter', system-ui, -apple-system, sans-serif;
+$headings-font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
 $headings-font-weight: 700;
+$font-family-monospace: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
 
-// Texto y controles mas grandes que el default de Bootstrap: mismo motivo,
-// facilitar la lectura a usuarios grandes de edad.
+// Texto y controles mas grandes que el default de Bootstrap: para facilitar
+// la lectura a usuarios grandes de edad -- no depende de que tipografia se
+// use, se mantiene igual.
 $font-size-base: 1.05rem;
 $input-padding-y: 0.6rem;
 $input-padding-x: 0.9rem;
@@ -153,6 +177,15 @@ body {
   padding: 0.4rem 0.5rem;
 }
 
+// Badge de marca "Dahua" (Panel NVR > Grabaciones) -- mismo criterio que
+// Bootstrap usa para text-bg-success/warning/etc (fondo tenue, texto en el
+// color plano), pero $dahua no es un color de $theme-colors asi que no sale
+// gratis con una utilidad de Bootstrap.
+.badge-dahua {
+  background-color: rgba($dahua, 0.14);
+  color: $dahua;
+}
+
 .dashboard-tile {
   transition: transform 0.15s, border-color 0.15s;
 }
@@ -172,13 +205,14 @@ body {
   background-color: var(--bs-tertiary-bg) !important;
 }
 
-// Sidebar estilo GLPI (panel lateral navy oscuro, colapsable) — a pedido,
-// tomando el layout/paleta de ahi para la navegacion. El contenido sigue en
-// modo oscuro (ver header de este archivo, decision de accesibilidad para
+// Sidebar estilo GLPI (panel lateral oscuro, colapsable) — a pedido, tomando
+// el layout de ahi para la navegacion (el color sigue la paleta nueva de
+// arriba, no el navy institucional original). El contenido sigue en modo
+// oscuro (ver header de este archivo, decision de accesibilidad para
 // personal de mayor edad): esto solo reemplaza la navbar superior de antes.
 $sidebar-width: 300px;
-$sidebar-bg: #111a2e;
-$sidebar-bg-hover: #1b2740;
+$sidebar-bg: #0a0e13;
+$sidebar-bg-hover: #12181f;
 $sidebar-text: rgba(255, 255, 255, 0.82);
 $sidebar-text-muted: rgba(255, 255, 255, 0.5);
 $sidebar-border: rgba(255, 255, 255, 0.08);

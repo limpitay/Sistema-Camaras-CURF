@@ -706,7 +706,9 @@ export default function Nvr() {
                     <div className="fw-semibold">{nvr.hostname}</div>
                     <div className="small text-body-secondary font-monospace">{nvr.ip || 'sin IP'}</div>
                     <div className="d-flex flex-wrap gap-1 mt-2">
-                      {nvr.marca && <span className="badge text-bg-secondary">{nvr.marca}</span>}
+                      {nvr.marca && (
+                        <span className={`badge ${nvr.marca === 'Dahua' ? 'badge-dahua' : 'text-bg-secondary'}`}>{nvr.marca}</span>
+                      )}
                       {nvr.modelo && <span className="badge text-bg-secondary">{nvr.modelo}</span>}
                       {(nvr.edificio || nvr.piso) && (
                         <span className="badge text-bg-secondary">{[nvr.edificio, nvr.piso].filter(Boolean).join(' · ')}</span>
