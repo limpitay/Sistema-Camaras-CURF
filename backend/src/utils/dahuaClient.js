@@ -2,12 +2,12 @@
 // (ver httpDigest.js) pero protocolo CGI propio de Dahua: texto plano
 // "clave=valor" por linea (nada de XML), y endpoints totalmente distintos.
 //
-// Cobertura mas chica que isapiClient.js a proposito: solo discos y estado
-// de canales, que es lo unico diagnosticado y confirmado contra un NVR real
-// (DHI-NVR4232-4KS2, ver los scripts dahua_*.py que probaron estos campos).
-// Todavia no hay endpoint de busqueda de grabaciones ni de bitrate por canal
-// para Dahua, asi que el Panel NVR muestra esos datos en null para estos NVR
-// hasta que se agreguen.
+// Cobertura mas chica que isapiClient.js a proposito: discos, estado de
+// canales y bitrate configurado, que es lo diagnosticado y confirmado contra
+// un NVR real (DHI-NVR4232-4KS2, ver los scripts dahua_*.py que probaron
+// estos campos). Todavia no hay endpoint de busqueda de grabaciones para
+// Dahua, asi que grabacionMasAntigua/diasDisponibles quedan en null para
+// estos NVR hasta que se diagnostique ese (ver mediaFileFind.cgi o similar).
 const { pedidoDigest } = require('./httpDigest');
 
 // El path CGI real va antes de la query (ej. /cgi-bin/storageDevice.cgi),
@@ -147,9 +147,48 @@ async function obtenerInfoDispositivo(nvr) {
   return { nombre: null, modelo: kv.type || null, firmware: null, numeroSerie: null };
 }
 
+// encode.cgi?action=getConfig&name=Encode -- lineas tipo:
+//   table.Encode[0].MainFormat[0].Video.Compression=H.265
+//   table.Encode[0].MainFormat[0].Video.Resolution=2560x1440
+//   table.Encode[0].MainFormat[0].Video.BitRate=4096
+// A diferencia de ISAPI (que exige un pedido por canal), este UN SOLO
+// pedido trae el bitrate configurado de TODOS los canales -- se usa el
+// stream principal (MainFormat[0]), igual criterio que obtenerParametros
+// VideoCanal en isapiClient.js. Dahua graba en CBR por defecto, asi que el
+// bitrate configurado ya es una buena estimacion del consumo real sin
+// tener que medir trafico.
+const LINEA_ENCODE_RE = /^table\.Encode\[(\d+)]\.MainFormat\[0]\.Video\.(\w+)$/;
+
+async function obtenerParametrosVideoTodosCanales(nvr) {
+  const raw = await dahuaCgi(nvr, 'encode.cgi', { action: 'getConfig', name: 'Encode' });
+  const porCanal = new Map();
+  for (const linea of raw.trim().split(/\r?\n/)) {
+    const idx = linea.indexOf('=');
+    if (idx === -1) continue;
+    const clave = linea.slice(0, idx).trim();
+    const valor = linea.slice(idx + 1).trim();
+    const m = clave.match(LINEA_ENCODE_RE);
+    if (!m) continue;
+    const canal = Number(m[1]) + 1;
+    porCanal.set(canal, { ...(porCanal.get(canal) || {}), [m[2]]: valor });
+  }
+  const resultado = new Map();
+  for (const [canal, campos] of porCanal) {
+    const [ancho, alto] = (campos.Resolution || '').split('x').map(Number);
+    resultado.set(canal, {
+      codec: campos.Compression || null,
+      ancho: ancho || null,
+      alto: alto || null,
+      bitrateMaxKbps: Number(campos.BitRate) || null,
+    });
+  }
+  return resultado;
+}
+
 module.exports = {
   obtenerInfoDispositivo,
   obtenerEstadoDiscos,
   obtenerEstadoCanales,
   obtenerNombresCanales,
+  obtenerParametrosVideoTodosCanales,
 };

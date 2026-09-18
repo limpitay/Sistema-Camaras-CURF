@@ -353,6 +353,17 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
 
   const descripcionPorHostname = await obtenerDescripcionPorHostname();
 
+  // Dahua trae el bitrate de TODOS los canales en un solo pedido -- se
+  // busca una vez antes del loop (no adentro, que repetiria el mismo pedido
+  // por cada canal). ISAPI no tiene bulk, sigue pidiendose canal por canal
+  // mas abajo, dentro del loop.
+  let videoPorCanal = null;
+  if (cliente.obtenerParametrosVideoTodosCanales) {
+    try {
+      videoPorCanal = await cliente.obtenerParametrosVideoTodosCanales(nvr);
+    } catch { /* dato de mas, no bloquea el resto */ }
+  }
+
   // Secuencial, no en paralelo: los NVR embebidos limitan cuantas sesiones
   // HTTP/ISAPI concurrentes aceptan, y bombardearlos con 16-32 pedidos a la
   // vez hace que empiecen a rechazar conexiones.
@@ -390,13 +401,17 @@ router.get('/:id/canales', auth, requireRole('admin', 'avanzado', 'sistemas_lect
       : null;
 
     // Bitrate solo para canales con camara conectada -- para los vacios no
-    // hay stream que consultar y es un pedido menos por canal. Tambien sin
-    // diagnosticar para Dahua todavia (ver dahuaClient.js).
+    // hay stream que consultar. En Dahua ya se trajo todo junto arriba
+    // (videoPorCanal); en Hikvision/ISAPI es un pedido mas por canal.
     let video = null;
-    if (estado?.online && cliente.obtenerParametrosVideoCanal) {
-      try {
-        video = await cliente.obtenerParametrosVideoCanal(nvr, canal);
-      } catch { /* dato de mas, no bloquea el resto */ }
+    if (estado?.online) {
+      if (videoPorCanal) {
+        video = videoPorCanal.get(canal) || null;
+      } else if (cliente.obtenerParametrosVideoCanal) {
+        try {
+          video = await cliente.obtenerParametrosVideoCanal(nvr, canal);
+        } catch { /* dato de mas, no bloquea el resto */ }
+      }
     }
 
     const nombreCrudo = nombrePorCanal.get(canal) || null;
