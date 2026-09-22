@@ -259,43 +259,30 @@ function colorPorHostname(hostname, ordenAlfabetico) {
   return COLORES_NVR[i % COLORES_NVR.length];
 }
 
-// Linea de tiempo del espacio ocupado por NVR (ultimos ~60 dias). Los puntos
-// solo existen los dias que alguien actualizo ese NVR -- no es una medicion
-// continua, por eso se marcan los puntos reales en vez de solo la linea.
-function GraficoHistorialStorage({ nvrs, historial }) {
-  const ancho = 640;
-  const alto = 260;
-  const margen = { top: 12, right: 16, bottom: 28, left: 46 };
-  const [hoverFecha, setHoverFecha] = useState(null);
+// Linea de tiempo del espacio ocupado de UN NVR (ultimos ~60 dias). Los
+// puntos se suman automaticamente una vez por dia (ver scheduler en el
+// backend, backend/src/utils/historialScheduler.js) y tambien al apretar
+// "Actualizar" a mano -- una tarjeta por NVR es mas facil de leer que todas
+// las lineas superpuestas en un solo grafico.
+function GraficoStorageNvr({ puntos, color }) {
+  const ancho = 320;
+  const alto = 150;
+  const margen = { top: 10, right: 10, bottom: 20, left: 42 };
+  const [hoverIdx, setHoverIdx] = useState(null);
 
-  const ordenAlfabetico = useMemo(() => nvrs.map((n) => n.hostname).sort(), [nvrs]);
-
-  const series = useMemo(() => nvrs
-    .map((nvr) => {
-      const puntos = (historial[nvr.id] || []).map((p) => ({ fecha: p.fecha, valor: p.ocupadoGb }));
-      return puntos.length ? { hostname: nvr.hostname, color: colorPorHostname(nvr.hostname, ordenAlfabetico), puntos } : null;
-    })
-    .filter(Boolean), [nvrs, historial, ordenAlfabetico]);
-
-  const todasLasFechas = useMemo(() => {
-    const set = new Set();
-    series.forEach((s) => s.puntos.forEach((p) => set.add(p.fecha)));
-    return [...set].sort();
-  }, [series]);
-
-  if (series.length === 0) {
+  if (puntos.length === 0) {
     return (
-      <div className="text-body-secondary small">
-        Todavia no hay puntos guardados. Se suma uno por NVR cada dia que lo actualices (arriba, en Grabaciones).
+      <div className="text-body-secondary small text-center py-4">
+        Sin puntos guardados todavia para este NVR.
       </div>
     );
   }
 
-  const minFecha = todasLasFechas[0];
-  const maxFecha = todasLasFechas[todasLasFechas.length - 1];
+  const minFecha = puntos[0].fecha;
+  const maxFecha = puntos[puntos.length - 1].fecha;
   const tMin = new Date(minFecha).getTime();
   const rangoT = Math.max(1, new Date(maxFecha).getTime() - tMin);
-  const maxValor = Math.max(1, ...series.flatMap((s) => s.puntos.map((p) => p.valor))) * 1.08;
+  const maxValor = Math.max(1, ...puntos.map((p) => p.valor)) * 1.15;
 
   const x = (fecha) => margen.left + ((new Date(fecha).getTime() - tMin) / rangoT) * (ancho - margen.left - margen.right);
   const y = (valor) => (alto - margen.bottom) - (valor / maxValor) * (alto - margen.top - margen.bottom);
@@ -303,14 +290,17 @@ function GraficoHistorialStorage({ nvrs, historial }) {
   const manejarMouseMove = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const px = ((e.clientX - rect.left) / rect.width) * ancho;
-    let mejor = todasLasFechas[0];
+    let mejorIdx = 0;
     let mejorDist = Infinity;
-    todasLasFechas.forEach((f) => {
-      const d = Math.abs(x(f) - px);
-      if (d < mejorDist) { mejorDist = d; mejor = f; }
+    puntos.forEach((p, i) => {
+      const d = Math.abs(x(p.fecha) - px);
+      if (d < mejorDist) { mejorDist = d; mejorIdx = i; }
     });
-    setHoverFecha(mejor);
+    setHoverIdx(mejorIdx);
   };
+
+  const hover = hoverIdx != null ? puntos[hoverIdx] : null;
+  const soloUnPunto = puntos.length === 1;
 
   return (
     <div>
@@ -318,69 +308,59 @@ function GraficoHistorialStorage({ nvrs, historial }) {
         viewBox={`0 0 ${ancho} ${alto}`}
         className="w-100"
         role="img"
-        aria-label="Espacio ocupado por NVR en el tiempo"
+        aria-label="Espacio ocupado en el tiempo"
         onMouseMove={manejarMouseMove}
-        onMouseLeave={() => setHoverFecha(null)}
+        onMouseLeave={() => setHoverIdx(null)}
       >
         {[0, 0.5, 1].map((f) => {
           const valor = maxValor * f;
           return (
             <g key={f}>
               <line x1={margen.left} x2={ancho - margen.right} y1={y(valor)} y2={y(valor)} stroke="var(--bs-border-color)" strokeWidth="1" />
-              <text x={margen.left - 6} y={y(valor)} textAnchor="end" dominantBaseline="middle" fontSize="9" fill="var(--bs-secondary-color)">
+              <text x={margen.left - 5} y={y(valor)} textAnchor="end" dominantBaseline="middle" fontSize="8" fill="var(--bs-secondary-color)">
                 {num(valor)}
               </text>
             </g>
           );
         })}
-        <text x={x(minFecha)} y={alto - 8} fontSize="9" fill="var(--bs-secondary-color)">{formatearSoloFecha(minFecha)}</text>
-        <text x={x(maxFecha)} y={alto - 8} fontSize="9" fill="var(--bs-secondary-color)" textAnchor="end">{formatearSoloFecha(maxFecha)}</text>
-
-        {hoverFecha && (
-          <line x1={x(hoverFecha)} x2={x(hoverFecha)} y1={margen.top} y2={alto - margen.bottom} stroke="var(--bs-secondary-color)" strokeWidth="1" strokeDasharray="3,3" />
+        <text x={x(minFecha)} y={alto - 6} fontSize="8" fill="var(--bs-secondary-color)">{formatearSoloFecha(minFecha)}</text>
+        {!soloUnPunto && (
+          <text x={x(maxFecha)} y={alto - 6} fontSize="8" fill="var(--bs-secondary-color)" textAnchor="end">{formatearSoloFecha(maxFecha)}</text>
         )}
 
-        {series.map((s) => (
-          <g key={s.hostname}>
-            <path
-              d={s.puntos.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(p.fecha)} ${y(p.valor)}`).join(' ')}
-              fill="none"
-              stroke={s.color}
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            {s.puntos.map((p) => (
-              <circle key={p.fecha} cx={x(p.fecha)} cy={y(p.valor)} r={hoverFecha === p.fecha ? 4 : 2.5} fill={s.color} />
-            ))}
-          </g>
+        {hover && (
+          <line x1={x(hover.fecha)} x2={x(hover.fecha)} y1={margen.top} y2={alto - margen.bottom} stroke="var(--bs-secondary-color)" strokeWidth="1" strokeDasharray="3,3" />
+        )}
+
+        <path
+          d={puntos.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(p.fecha)} ${y(p.valor)}`).join(' ')}
+          fill="none"
+          stroke={color}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {puntos.map((p, i) => (
+          <circle key={p.fecha} cx={x(p.fecha)} cy={y(p.valor)} r={hoverIdx === i ? 4 : 2.5} fill={color} />
         ))}
       </svg>
-
-      <div className="d-flex flex-wrap gap-3 mt-2">
-        {series.map((s) => {
-          const punto = hoverFecha ? s.puntos.find((p) => p.fecha === hoverFecha) : null;
-          return (
-            <div key={s.hostname} className="d-flex align-items-center gap-2 small">
-              <span style={{ width: 10, height: 10, borderRadius: 2, background: s.color, display: 'inline-block', flexShrink: 0 }} />
-              {s.hostname}
-              {hoverFecha && <span className="font-monospace text-body-secondary">{punto ? `${num(punto.valor)} GB` : 'sin dato'}</span>}
-            </div>
-          );
-        })}
+      <div className="small text-body-secondary text-center" style={{ minHeight: '1.2em' }}>
+        {hover ? `${formatearSoloFecha(hover.fecha)} -- ${num(hover.valor)} GB` : ' '}
       </div>
-      {hoverFecha && <div className="small text-body-secondary mt-1">{formatearSoloFecha(hoverFecha)}</div>}
     </div>
   );
 }
 
-// Evolucion del espacio ocupado (no una comparativa del dia de hoy como
-// antes -- ver GraficoHistorialStorage). Un punto por NVR por dia, solo los
-// dias que alguien lo actualiza; el historial recien arranca desde que se
-// sumo esta pantalla, no hay como completar el pasado.
+// Evolucion del espacio ocupado, un grafico chico por NVR (mas facil de leer
+// que todas las lineas superpuestas). Un punto por dia: se suma solo cada
+// 24hs via el scheduler del backend, y tambien al apretar "Actualizar" a
+// mano en Grabaciones -- el historial recien arranca desde que se sumo esta
+// pantalla, no hay como completar el pasado.
 function SeccionMetricas({ nvrs }) {
   const [historial, setHistorial] = useState(null);
   const [error, setError] = useState('');
+
+  const ordenAlfabetico = useMemo(() => nvrs.map((n) => n.hostname).sort(), [nvrs]);
 
   useEffect(() => {
     client.get('/nvrs/historial?dias=60')
@@ -391,18 +371,42 @@ function SeccionMetricas({ nvrs }) {
   return (
     <section>
       <p className="text-body-secondary small mb-3">
-        Espacio ocupado por NVR, ultimos 60 dias. Un punto por NVR por dia, solo en los dias que alguien lo
-        actualiza (en Grabaciones) -- no es una medicion continua, y el historial recien empieza a partir de
-        que se sumo esta pantalla.
+        Espacio ocupado por NVR, ultimos 60 dias -- un punto por dia. Se captura solo cada 24hs (de madrugada) y
+        tambien al apretar "Actualizar" en Grabaciones; el historial recien empieza a partir de que se sumo esta
+        pantalla.
       </p>
       {error && <div className="alert alert-danger py-2 small">{error}</div>}
       {!historial && !error && <div className="text-body-secondary small">Cargando historial...</div>}
       {historial && (
-        <div className="card shadow-sm">
-          <div className="card-body">
-            <div className="fw-semibold small mb-3">Espacio ocupado (GB)</div>
-            <GraficoHistorialStorage nvrs={nvrs} historial={historial} />
-          </div>
+        <div className="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+          {nvrs.map((nvr) => {
+            const puntos = (historial[nvr.id] || []).map((p) => ({ fecha: p.fecha, valor: p.ocupadoGb, capacidad: p.capacidadGb }));
+            const color = colorPorHostname(nvr.hostname, ordenAlfabetico);
+            const ultimo = puntos[puntos.length - 1] || null;
+            return (
+              <div className="col" key={nvr.id}>
+                <div className="card shadow-sm h-100">
+                  <div className="card-body">
+                    <div className="d-flex justify-content-between align-items-start mb-2 gap-2">
+                      <div>
+                        <div className="fw-semibold small">{nvr.hostname}</div>
+                        <div className="text-body-secondary small">Espacio ocupado (GB)</div>
+                      </div>
+                      {ultimo && (
+                        <div className="text-end flex-shrink-0">
+                          <div className="font-monospace fw-bold">{num(ultimo.valor)} GB</div>
+                          {ultimo.capacidad ? (
+                            <div className="small text-body-secondary">{num((ultimo.valor / ultimo.capacidad) * 100)}% de {num(ultimo.capacidad)} GB</div>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                    <GraficoStorageNvr puntos={puntos} color={color} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </section>

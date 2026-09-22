@@ -2,20 +2,20 @@ const express = require('express');
 const db = require('../db');
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
-const isapiClient = require('../utils/isapiClient');
-const dahuaClient = require('../utils/dahuaClient');
 const { listarCamarasArtemis } = require('../utils/artemisClient');
+const {
+  clienteDeNvr,
+  guardarCanalesSnapshot,
+  capturarEstadoNvr,
+} = require('../utils/historialNvr');
 
 const router = express.Router();
 
-// Hikvision habla ISAPI, Dahua habla su propio CGI (ver dahuaClient.js) --
-// cada NVR usa el cliente que corresponde a su marca. dahuaClient cubre
-// menos (todavia no hay busqueda de grabaciones ni bitrate por canal para
-// Dahua), asi que quien llama tiene que revisar si la funcion existe antes
-// de usarla en vez de asumir paridad total con ISAPI.
-function clienteDeNvr(nvr) {
-  return /hikvision/i.test(nvr.marca || '') ? isapiClient : dahuaClient;
-}
+// clienteDeNvr (Hikvision/ISAPI vs Dahua/CGI), guardarEstadoSnapshot,
+// guardarCanalesSnapshot, guardarHistorialDiario y capturarEstadoNvr viven en
+// utils/historialNvr.js -- compartidos con el scheduler automatico de
+// historial (ver historialScheduler.js) para no duplicar esa logica entre
+// la ruta disparada a mano y la corrida cada 24hs.
 
 // Un NVR agrupa muchas camaras (RF-04): cantidad_camaras se calcula al
 // vuelo aca, no se guarda como columna, para que nunca quede desactualizada.
@@ -48,51 +48,6 @@ function seleccionarCampos(row, rol) {
 function gbDiaDesdeBitrate(bitrateMaxKbps) {
   if (!bitrateMaxKbps) return null;
   return (bitrateMaxKbps * 1000 / 8 * 86400) / 1e9;
-}
-
-// Cache compartido del Panel NVR (migracion 029): lo que trae un "Actualizar"
-// se guarda aca para que cualquier usuario que entre despues lo vea tal cual
-// quedo, sin pegarle de nuevo al NVR -- estos equipos no bancan que cada
-// usuario que abre la pantalla dispare su propia tanda de pedidos ISAPI.
-// estado_json y canales_json se pisan cada uno por separado (el panel siempre
-// pide primero /estado y despues /canales, nunca al reves).
-function guardarEstadoSnapshot(nvrId, estado, actualizadoPor) {
-  db.prepare(`
-    INSERT INTO nvr_snapshots (nvr_id, estado_json, canales_json, actualizado_en, actualizado_por)
-    VALUES (?, ?, 'null', ?, ?)
-    ON CONFLICT (nvr_id) DO UPDATE SET estado_json = excluded.estado_json,
-      actualizado_en = excluded.actualizado_en, actualizado_por = excluded.actualizado_por
-  `).run(nvrId, JSON.stringify(estado), new Date().toISOString(), actualizadoPor || null);
-}
-
-function guardarCanalesSnapshot(nvrId, canales, actualizadoPor) {
-  db.prepare(`
-    INSERT INTO nvr_snapshots (nvr_id, estado_json, canales_json, actualizado_en, actualizado_por)
-    VALUES (?, 'null', ?, ?, ?)
-    ON CONFLICT (nvr_id) DO UPDATE SET canales_json = excluded.canales_json,
-      actualizado_en = excluded.actualizado_en, actualizado_por = excluded.actualizado_por
-  `).run(nvrId, JSON.stringify(canales), new Date().toISOString(), actualizadoPor || null);
-}
-
-// Panel NVR > Metricas (migracion 030): un punto por NVR por dia (hora
-// Argentina, fija en UTC-3 como el resto del panel) con el espacio ocupado,
-// para poder graficar la evolucion en el tiempo. Se pisa si ya habia un punto
-// hoy (varios "Actualizar" el mismo dia no duplican, solo refrescan el valor).
-function fechaArgentinaHoy() {
-  return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
-function guardarHistorialDiario(nvrId, estado) {
-  const discos = estado?.discos || [];
-  if (!discos.length) return;
-  const capacidadMb = discos.reduce((a, d) => a + (d.capacidadMb || 0), 0);
-  const libreMb = discos.reduce((a, d) => a + (d.libreMb || 0), 0);
-  if (!capacidadMb) return;
-  db.prepare(`
-    INSERT INTO nvr_historial_diario (nvr_id, fecha, ocupado_gb, capacidad_gb)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT (nvr_id, fecha) DO UPDATE SET ocupado_gb = excluded.ocupado_gb, capacidad_gb = excluded.capacidad_gb
-  `).run(nvrId, fechaArgentinaHoy(), (capacidadMb - libreMb) / 1024, capacidadMb / 1024);
 }
 
 // GET /api/nvrs
@@ -304,11 +259,7 @@ router.get('/:id/estado', auth, requireRole('admin', 'avanzado', 'sistemas_lectu
   if (!nvr) return res.status(404).json({ error: 'NVR no encontrado' });
 
   try {
-    const cliente = clienteDeNvr(nvr);
-    const [dispositivo, discos] = await Promise.all([cliente.obtenerInfoDispositivo(nvr), cliente.obtenerEstadoDiscos(nvr)]);
-    const estado = { dispositivo, discos };
-    guardarEstadoSnapshot(nvr.id, estado, req.user.nombre);
-    guardarHistorialDiario(nvr.id, estado);
+    const estado = await capturarEstadoNvr(nvr, req.user.nombre);
     res.json(estado);
   } catch (err) {
     res.status(502).json({ error: `No se pudo consultar el NVR: ${err.message}` });

@@ -5,6 +5,7 @@ const multer = require('multer');
 const db = require('./db');
 const { UPLOADS_DIR } = require('./middleware/upload');
 const authImagen = require('./middleware/authImagen');
+const { iniciarSchedulerHistorial } = require('./utils/historialScheduler');
 
 const app = express();
 
@@ -62,6 +63,13 @@ const PORT = process.env.PORT || 3001;
 const server = app.listen(PORT, () => {
   console.log(`🚀 Backend corriendo en http://localhost:${PORT}`);
 });
+
+// Panel NVR > Metricas: captura automatica del espacio ocupado una vez cada
+// 24hs (ver historialScheduler.js) para que el historial no dependa de que
+// alguien entre al panel y apriete "Actualizar". Desactivado en tests.
+if (process.env.NODE_ENV !== 'test') {
+  iniciarSchedulerHistorial();
+}
 
 // Sin esto, un `docker stop`/`docker compose restart` mata el proceso con
 // SIGTERM y, si Node no atiende la senal, el contenedor lo termina a la
