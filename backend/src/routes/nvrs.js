@@ -3,6 +3,8 @@ const db = require('../db');
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
 const { listarCamarasArtemis } = require('../utils/artemisClient');
+const isapiClient = require('../utils/isapiClient');
+const { calcularSincronizacion } = require('../utils/sincronizarIps');
 const {
   clienteDeNvr,
   guardarCanalesSnapshot,
@@ -159,6 +161,75 @@ router.get('/historial', auth, requireRole('admin', 'avanzado', 'sistemas_lectur
     (porNvr[fila.nvr_id] ||= []).push({ fecha: fila.fecha, ocupadoGb: fila.ocupado_gb, capacidadGb: fila.capacidad_gb });
   }
   res.json(porNvr);
+});
+
+// GET /api/nvrs/sincronizar-ips/preview — Recursos > Camaras: compara
+// hostname/ip cargados a mano contra lo que reportan en vivo los NVR
+// Hikvision (ISAPI). El I/O (consultar cada NVR) vive aca; el matcheo en si
+// -- por posicion (nvr_id+canal) o, si no hay canal cargado, por nombre -- es
+// logica pura en utils/sincronizarIps.js (testeada aparte). Solo lectura, no
+// toca la base -- eso lo hace POST /sincronizar-ips/aplicar una vez que el
+// admin confirma que hacer con cada fila.
+router.get('/sincronizar-ips/preview', auth, requireRole('admin', 'avanzado'), async (req, res) => {
+  const nvrs = db.prepare(
+    "SELECT * FROM nvrs WHERE marca = 'Hikvision' AND ip IS NOT NULL AND usuario IS NOT NULL AND contrasena IS NOT NULL"
+  ).all();
+
+  const canalesEnVivo = [];
+  const errores = [];
+
+  // Secuencial entre NVR: mismo motivo que el resto del archivo (equipos
+  // embebidos, pocas sesiones ISAPI concurrentes).
+  for (const nvr of nvrs) {
+    let estados;
+    let nombres;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      [estados, nombres] = await Promise.all([
+        isapiClient.obtenerEstadoCanales(nvr),
+        isapiClient.obtenerNombresCanales(nvr),
+      ]);
+    } catch (err) {
+      errores.push(`${nvr.hostname}: ${err.message}`);
+      continue;
+    }
+    const ipPorCanal = new Map(estados.map((c) => [c.canal, c.ip]));
+    for (const { canal, nombre } of nombres) {
+      canalesEnVivo.push({ nvrId: nvr.id, nvr: nvr.hostname, canal, ip: ipPorCanal.get(canal) || null, nombre });
+    }
+  }
+
+  const camaras = db.prepare("SELECT id, hostname, descripcion, ip, nvr_id, canal FROM camaras WHERE marca = 'Hikvision'").all();
+  const { actualizar, ambiguos, sinCambios } = calcularSincronizacion({ canalesEnVivo, camaras });
+
+  res.json({ actualizar, ambiguos, sinCambios, errores });
+});
+
+// POST /api/nvrs/sincronizar-ips/aplicar — Admin. Aplica solo los cambios que
+// el admin selecciono en la pantalla de preview (nunca se auto-aplica nada).
+// Escribe hostname/ip/nvr_id/canal juntos -- son las 4 columnas que describen
+// "que camara es y donde esta enchufada", todas sacadas del mismo canal en
+// vivo que armo el preview.
+router.post('/sincronizar-ips/aplicar', auth, requireRole('admin'), (req, res) => {
+  const { cambios } = req.body;
+  if (!Array.isArray(cambios) || cambios.length === 0) {
+    return res.status(400).json({ error: 'cambios (array de {camaraId, hostname, ip, nvrIdNuevo, canal}) es requerido' });
+  }
+
+  const actualizar = db.prepare(
+    "UPDATE camaras SET hostname = ?, ip = ?, nvr_id = ?, canal = ?, updated_at = datetime('now') WHERE id = ? AND marca = 'Hikvision'"
+  );
+  let aplicados = 0;
+  const transaccion = db.transaction((filas) => {
+    for (const { camaraId, hostname, ip, nvrIdNuevo, canal } of filas) {
+      if (!camaraId || !hostname || !ip || !nvrIdNuevo || canal == null) continue;
+      const resultado = actualizar.run(hostname, ip, nvrIdNuevo, canal, camaraId);
+      if (resultado.changes > 0) aplicados += 1;
+    }
+  });
+  transaccion(cambios);
+
+  res.json({ aplicados });
 });
 
 // GET /api/nvrs/:id — incluye el detalle de las camaras asociadas

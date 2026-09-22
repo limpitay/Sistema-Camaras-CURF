@@ -8,6 +8,7 @@ import { quitarAcentos } from '../utils/texto';
 const TABS = [
   { id: 'grabaciones', label: 'Grabaciones' },
   { id: 'metricas', label: 'Metricas' },
+  { id: 'sincronizar-ips', label: 'Sincronizar IPs', roles: ['admin', 'avanzado'] },
 ];
 
 // Panel NVR: a diferencia de Recursos > NVR (inventario cargado a mano), esto
@@ -50,6 +51,13 @@ function formatearSoloHora(iso) { return aArgentina(iso)?.hora ?? '—'; }
 function limpio(texto) {
   const t = quitarAcentos(texto || '').trim();
   return t || null;
+}
+
+// Mismo criterio que normalizarNombreCanal en el backend (utils/sincronizarIps.js)
+// -- solo para decidir si mostrar el hostname nuevo como "cambia" en la tabla
+// de Sincronizar IPs, no para comparar datos criticos.
+function normalizarComparar(texto) {
+  return (texto || '').trim().toUpperCase();
 }
 
 function calcularStorage(estado) {
@@ -413,13 +421,188 @@ function SeccionMetricas({ nvrs }) {
   );
 }
 
+// Compara la IP cargada a mano en Recursos > Camaras contra la que reportan
+// en vivo los NVR Hikvision (ISAPI), matcheando por nombre de canal -- nunca
+// pisa nada solo: primero "Revisar" trae la comparacion, despues el admin
+// elige que aplicar. Los nombres duplicados en mas de un canal en vivo se
+// muestran aparte, sin tocarlos (no hay forma de saber cual IP es de cual
+// sin ambiguedad -- ver conversacion que origino esto: CAMONPB69 duplicado).
+function SeccionSincronizarIps({ puedeAplicar }) {
+  const [cargando, setCargando] = useState(false);
+  const [aplicando, setAplicando] = useState(false);
+  const [resultado, setResultado] = useState(null);
+  const [seleccion, setSeleccion] = useState({});
+  const [error, setError] = useState('');
+  const [aviso, setAviso] = useState('');
+
+  const revisar = () => {
+    setCargando(true);
+    setError('');
+    setAviso('');
+    client.get('/nvrs/sincronizar-ips/preview')
+      .then((res) => {
+        setResultado(res.data);
+        setSeleccion(Object.fromEntries(res.data.actualizar.map((a) => [a.camaraId, true])));
+      })
+      .catch((err) => setError(err.response?.data?.error || 'No se pudo consultar los NVR.'))
+      .finally(() => setCargando(false));
+  };
+
+  const toggleFila = (camaraId) => setSeleccion((prev) => ({ ...prev, [camaraId]: !prev[camaraId] }));
+
+  const aplicar = () => {
+    const cambios = resultado.actualizar
+      .filter((a) => seleccion[a.camaraId])
+      .map((a) => ({ camaraId: a.camaraId, hostname: a.hostnameNuevo, ip: a.ipNueva, nvrIdNuevo: a.nvrIdNuevo, canal: a.canal }));
+    if (cambios.length === 0) return;
+
+    setAplicando(true);
+    setError('');
+    client.post('/nvrs/sincronizar-ips/aplicar', { cambios })
+      .then((res) => {
+        setAviso(`Se actualizaron ${res.data.aplicados} camara(s).`);
+        const idsAplicados = new Set(cambios.map((c) => c.camaraId));
+        setResultado((prev) => ({ ...prev, actualizar: prev.actualizar.filter((a) => !idsAplicados.has(a.camaraId)) }));
+      })
+      .catch((err) => setError(err.response?.data?.error || 'No se pudo aplicar los cambios.'))
+      .finally(() => setAplicando(false));
+  };
+
+  const seleccionados = resultado ? resultado.actualizar.filter((a) => seleccion[a.camaraId]).length : 0;
+
+  return (
+    <section>
+      <p className="text-body-secondary small mb-3">
+        Compara hostname/IP cargados en Recursos &gt; Camaras contra lo que reportan en vivo los NVR Hikvision.
+        Si la camara ya tiene canal asignado, se matchea por esa posicion (y se corrige hostname e IP); si no, se
+        matchea por nombre (y solo se corrige IP/NVR/canal, ya que el nombre es lo que se usa para encontrarla).
+        Nada se toca hasta que confirmes que aplicar -- es de solo lectura hasta ese paso.
+      </p>
+
+      <button type="button" className="btn btn-sm btn-primary mb-3" disabled={cargando} onClick={revisar}>
+        {cargando ? 'Consultando NVR...' : 'Revisar'}
+      </button>
+
+      {error && <div className="alert alert-danger py-2 small">{error}</div>}
+      {aviso && <div className="alert alert-success py-2 small">{aviso}</div>}
+
+      {resultado && (
+        <>
+          {resultado.errores.length > 0 && (
+            <div className="alert alert-warning py-2 small">
+              No se pudieron consultar {resultado.errores.length} NVR:
+              <ul className="mb-0">
+                {resultado.errores.map((e, i) => <li key={i}>{e}</li>)}
+              </ul>
+            </div>
+          )}
+
+          <div className="card shadow-sm mb-3">
+            <div className="card-header fw-semibold d-flex justify-content-between align-items-center">
+              <span>Diferencias contra lo que reporta el NVR ({resultado.actualizar.length})</span>
+              {puedeAplicar && resultado.actualizar.length > 0 && (
+                <button type="button" className="btn btn-sm btn-success" disabled={aplicando || seleccionados === 0} onClick={aplicar}>
+                  {aplicando ? 'Aplicando...' : `Aplicar seleccionados (${seleccionados})`}
+                </button>
+              )}
+            </div>
+            <div className="card-body p-0">
+              {resultado.actualizar.length === 0 ? (
+                <div className="p-3 text-body-secondary small">
+                  Sin diferencias -- {resultado.sinCambios} camara(s) ya coinciden con lo que reporta el NVR.
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-sm align-middle mb-0">
+                    <thead className="table-light">
+                      <tr>
+                        {puedeAplicar && <th style={{ width: 32 }} />}
+                        <th>Camara</th>
+                        <th>Hostname en NVR</th>
+                        <th>NVR / canal</th>
+                        <th>IP actual</th>
+                        <th>IP en vivo (NVR)</th>
+                        <th>Match por</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {resultado.actualizar.map((a) => {
+                        const hostnameCambia = normalizarComparar(a.hostname) !== normalizarComparar(a.hostnameNuevo);
+                        return (
+                          <tr key={a.camaraId}>
+                            {puedeAplicar && (
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  className="form-check-input"
+                                  checked={!!seleccion[a.camaraId]}
+                                  onChange={() => toggleFila(a.camaraId)}
+                                />
+                              </td>
+                            )}
+                            <td>
+                              <div className="fw-semibold">{a.hostname}</div>
+                              {a.descripcion && <div className="small text-body-secondary">{a.descripcion}</div>}
+                            </td>
+                            <td className={`font-monospace small ${hostnameCambia ? 'text-warning-emphasis fw-semibold' : 'text-body-secondary'}`}>
+                              {hostnameCambia ? a.hostnameNuevo : '—'}
+                            </td>
+                            <td className="small text-body-secondary">{a.nvr} - canal {a.canal}</td>
+                            <td className="font-monospace small text-body-secondary">{a.ipActual || '—'}</td>
+                            <td className="font-monospace small">{a.ipNueva}</td>
+                            <td className="small text-body-secondary">{a.matchPor === 'canal' ? 'posicion' : 'nombre'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            {!puedeAplicar && resultado.actualizar.length > 0 && (
+              <div className="card-footer small text-body-secondary">
+                Pedile a un admin que aplique estos cambios -- tu rol solo puede revisar.
+              </div>
+            )}
+          </div>
+
+          {resultado.ambiguos.length > 0 && (
+            <div className="card shadow-sm">
+              <div className="card-header fw-semibold">
+                Nombres duplicados en mas de un canal ({resultado.ambiguos.length}) -- no se tocan
+              </div>
+              <div className="card-body">
+                <p className="text-body-secondary small">
+                  Estas camaras aparecen con el mismo nombre configurado en mas de un canal en vivo -- no hay forma
+                  de saber cual IP corresponde a cual sin verificarlo fisicamente. Revisalas a mano y renombra la
+                  que corresponda antes de volver a correr esto.
+                </p>
+                <ul className="small mb-0">
+                  {resultado.ambiguos.map((amb) => (
+                    <li key={amb.hostname}>
+                      <span className="fw-semibold">{amb.hostname}</span>
+                      {' -- '}
+                      {amb.ocurrencias.map((o) => `${o.nvr} canal ${o.canal} (${o.ip})`).join(', ')}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function Nvr() {
   const { user } = useAuth();
   // El tab activo vive en la URL (?tab=...) para que el sidebar (Layout,
   // grupo "Panel NVR" desplegable) pueda linkear directo a cada uno -- mismo
   // patron que los tabs de Recursos en Crud.jsx.
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabIds = TABS.map((t) => t.id);
+  const tabsVisibles = TABS.filter((t) => !t.roles || t.roles.includes(user?.rol));
+  const tabIds = tabsVisibles.map((t) => t.id);
   const [tab, setTabState] = useState(() => {
     const desdeUrl = searchParams.get('tab');
     return tabIds.includes(desdeUrl) ? desdeUrl : 'grabaciones';
@@ -655,7 +838,7 @@ export default function Nvr() {
       )}
 
       <ul className="nav nav-tabs mt-3 mb-3">
-        {TABS.map((t) => (
+        {tabsVisibles.map((t) => (
           <li className="nav-item" key={t.id}>
             <button className={`nav-link ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>{t.label}</button>
           </li>
@@ -663,6 +846,8 @@ export default function Nvr() {
       </ul>
 
       {tab === 'metricas' && <SeccionMetricas nvrs={nvrsConApi} />}
+
+      {tab === 'sincronizar-ips' && <SeccionSincronizarIps puedeAplicar={user?.rol === 'admin'} />}
 
       {tab === 'grabaciones' && (
       <>
